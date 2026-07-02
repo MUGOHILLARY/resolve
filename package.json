@@ -1,20 +1,14 @@
 {
-  "name": "Resolve",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "resolve",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@11.9.0",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "^11.9.0",
-      "onFail": "download"
-    }
-  },
-  "type": "module"
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "lint": "pnpm --filter web lint",
+    "preview": "pnpm --filter web preview",
+    "install:all": "pnpm install -r"
+  }
 }
