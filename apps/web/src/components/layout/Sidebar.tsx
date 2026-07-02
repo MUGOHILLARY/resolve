@@ -8,30 +8,38 @@ import {
   Flame,
 } from "lucide-react";
 
+import { NavLink } from "react-router-dom";
+
 const menu = [
   {
     icon: LayoutDashboard,
     label: "Dashboard",
+    path: "/",
   },
   {
     icon: Waves,
     label: "Recovery",
+    path: "/recovery",
   },
   {
     icon: BarChart3,
     label: "Analytics",
+    path: "/analytics",
   },
   {
     icon: Bot,
     label: "AI Coach",
+    path: "/ai-coach",
   },
   {
     icon: Shield,
     label: "Blocker",
+    path: "/blocker",
   },
   {
     icon: Settings,
     label: "Settings",
+    path: "/settings",
   },
 ];
 
@@ -53,13 +61,21 @@ export default function Sidebar() {
           const Icon = item.icon;
 
           return (
-            <button
+            <NavLink
               key={item.label}
-              className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-slate-300 transition hover:bg-teal-500/10 hover:text-teal-400"
+              to={item.path}
+              end={item.path === "/"}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-xl px-4 py-3 transition ${
+                  isActive
+                    ? "bg-teal-500 text-slate-950 font-semibold"
+                    : "text-slate-300 hover:bg-teal-500/10 hover:text-teal-400"
+                }`
+              }
             >
               <Icon size={20} />
               <span>{item.label}</span>
-            </button>
+            </NavLink>
           );
         })}
       </nav>
