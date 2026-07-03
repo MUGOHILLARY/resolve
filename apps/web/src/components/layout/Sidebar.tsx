@@ -1,3 +1,4 @@
+import StreakFlame from "../dashboard/StreakFlame";
 import {
   LayoutDashboard,
   Waves,
@@ -5,7 +6,6 @@ import {
   Bot,
   Shield,
   Settings,
-  Flame,
 } from "lucide-react";
 
 import { NavLink } from "react-router-dom";
@@ -81,17 +81,14 @@ export default function Sidebar() {
       </nav>
 
       <div className="border-t border-slate-800 p-5">
-        <div className="rounded-2xl bg-teal-500/10 p-4">
-          <div className="flex items-center gap-2 text-teal-400">
-            <Flame size={20} />
-            <span className="font-semibold">7 Day Streak</span>
-          </div>
+  <div className="rounded-2xl bg-teal-500/10 p-4">
+    <StreakFlame />
 
-          <p className="mt-2 text-sm text-slate-400">
-            Keep going. Every day matters.
-          </p>
-        </div>
-      </div>
+    <p className="mt-2 text-sm text-slate-400">
+      Keep going. Every day matters.
+    </p>
+  </div>
+</div>
     </aside>
   );
 }
