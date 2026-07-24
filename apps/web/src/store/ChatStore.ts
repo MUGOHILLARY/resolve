@@ -1,54 +1,103 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 
-import type { ChatMessageType } from "../types/chat";
 
-type ChatStore = {
-  messages: ChatMessageType[];
-
-  addMessage: (
-    role: "assistant" | "user",
-    message: string
-  ) => void;
-
-  clearMessages: () => void;
-};
-
-function welcomeMessage(): ChatMessageType {
-  return {
-    id: crypto.randomUUID(),
-    role: "assistant",
-    message:
-      "Hello! I'm Resolve AI. I'm here to support your recovery journey. How are you feeling today?",
-    createdAt: Date.now(),
-  };
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
 }
 
-export const useChatStore = create<ChatStore>()(
-  persist(
-    (set) => ({
-      messages: [welcomeMessage()],
 
-      addMessage: (role, message) =>
-        set((state) => ({
-          messages: [
-            ...state.messages,
-            {
-              id: crypto.randomUUID(),
-              role,
-              message,
-              createdAt: Date.now(),
-            },
-          ],
-        })),
+interface ChatState {
 
-      clearMessages: () =>
-        set({
-          messages: [welcomeMessage()],
-        }),
+  messages: ChatMessage[];
+
+  loading: boolean;
+
+
+  addMessage: (
+    message: ChatMessage
+  ) => void;
+
+
+  setMessages: (
+    messages: ChatMessage[]
+  ) => void;
+
+
+  clearMessages: () => void;
+
+
+  setLoading: (
+    loading: boolean
+  ) => void;
+
+}
+
+
+
+export const useChatStore =
+create<ChatState>((set) => ({
+
+  messages: [],
+
+  loading: false,
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | Add New Message
+  |--------------------------------------------------------------------------
+  */
+
+  addMessage: (message) =>
+    set((state) => ({
+      messages: [
+        ...state.messages,
+        message,
+      ],
+    })),
+
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | Replace Messages
+  |--------------------------------------------------------------------------
+  */
+
+  setMessages: (messages) =>
+    set({
+      messages,
     }),
-    {
-      name: "resolve-ai-chat",
-    }
-  )
-);
+
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | Clear Conversation
+  |--------------------------------------------------------------------------
+  */
+
+  clearMessages: () =>
+    set({
+      messages: [],
+      loading: false,
+    }),
+
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | Loading State
+  |--------------------------------------------------------------------------
+  */
+
+  setLoading: (loading) =>
+    set({
+      loading,
+    }),
+
+
+}));

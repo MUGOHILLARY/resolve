@@ -1,183 +1,615 @@
-import { useEffect, useRef, useState } from "react";
-import { Bot, Send, Trash2 } from "lucide-react";
+import {
+  FormEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
-import ChatMessage from "./ChatMessage";
+import {
+  Send,
+  Trash2,
+  Bot,
+  User,
+} from "lucide-react";
+
+import {
+  askAI,
+  loadHistory,
+  clearHistory,
+} from "../../services/chatService";
+
+import {
+  useChatStore,
+} from "../../store/chatStore";
+
 import TypingIndicator from "./TypingIndicator";
 
-import { useChatStore } from "../../store/chatStore";
-import { useJournalStore } from "../../store/journalStore";
 
 export default function ChatLayout() {
-  const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const {
+    messages,
+    addMessage,
+    setMessages,
+    clearMessages,
+    loading,
+    setLoading,
+  } = useChatStore();
 
-  const messages = useChatStore((state) => state.messages);
-  const addMessage = useChatStore((state) => state.addMessage);
-  const clearMessages = useChatStore((state) => state.clearMessages);
 
-  const journalEntries = useJournalStore((state) => state.entries);
+  const [input, setInput] =
+    useState("");
+
+
+  const bottomRef =
+    useRef<HTMLDivElement | null>(
+      null
+    );
+
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | Load Previous Conversation
+  |--------------------------------------------------------------------------
+  */
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({
+
+    async function fetchHistory() {
+
+      try {
+
+        const history =
+          await loadHistory();
+
+
+        setMessages(
+          history.map(
+            (message, index) => ({
+              id:
+                message.id ??
+                `${Date.now()}-${index}`,
+
+              role:
+                message.role,
+
+              content:
+                message.content,
+
+              createdAt:
+                message.created_at ??
+                new Date()
+                  .toISOString(),
+            })
+          )
+        );
+
+
+      } catch (error) {
+
+        console.error(
+          "History loading failed:",
+          error
+        );
+
+      }
+
+    }
+
+
+    fetchHistory();
+
+  }, [setMessages]);
+
+
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | Scroll To Latest Message
+  |--------------------------------------------------------------------------
+  */
+
+  useEffect(() => {
+
+    bottomRef.current?.scrollIntoView({
       behavior: "smooth",
     });
-  }, [messages, isTyping]);
 
-  function handleSend() {
-    if (!input.trim()) return;
+  }, [messages, loading]);
 
-    const userInput = input.trim();
 
-    addMessage("user", userInput);
+
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | Send Message
+  |--------------------------------------------------------------------------
+  */
+
+  async function handleSubmit(
+    e: FormEvent
+  ) {
+
+    e.preventDefault();
+
+
+    const text =
+      input.trim();
+
+
+    if (!text || loading) {
+      return;
+    }
+
+
+
+    addMessage({
+
+      id:
+        crypto.randomUUID(),
+
+      role:
+        "user",
+
+      content:
+        text,
+
+      createdAt:
+        new Date()
+          .toISOString(),
+
+    });
+
+
 
     setInput("");
 
-    setIsTyping(true);
+    setLoading(true);
 
-    setTimeout(() => {
-      setIsTyping(false);
 
-      addMessage(
-        "assistant",
-        getAIResponse(userInput, journalEntries)
-      );
-    }, 1000);
+
+    try {
+
+
+      const reply =
+        await askAI(text);
+
+
+
+      addMessage({
+
+        id:
+          crypto.randomUUID(),
+
+        role:
+          "assistant",
+
+        content:
+          reply,
+
+        createdAt:
+          new Date()
+            .toISOString(),
+
+      });
+
+
+
+    } catch (error: any) {
+
+
+      addMessage({
+
+        id:
+          crypto.randomUUID(),
+
+        role:
+          "assistant",
+
+        content:
+          error.message ||
+          "Something went wrong.",
+
+        createdAt:
+          new Date()
+            .toISOString(),
+
+      });
+
+
+
+    } finally {
+
+      setLoading(false);
+
+    }
+
   }
 
+
+
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | Clear Conversation
+  |--------------------------------------------------------------------------
+  */
+
+  async function handleClear() {
+
+    try {
+
+      await clearHistory();
+
+      clearMessages();
+
+
+    } catch (error) {
+
+      console.error(
+        "Clear failed:",
+        error
+      );
+
+    }
+
+  }
+
+
+
+
+
   return (
-    <div className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 shadow-xl">
+
+    <div
+      className="
+        rounded-2xl
+        bg-slate-900
+        border
+        border-slate-800
+        overflow-hidden
+      "
+    >
+
+
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-800 p-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-500/10 text-teal-400">
-            <Bot size={26} />
+
+      <div
+        className="
+          flex
+          justify-between
+          items-center
+          px-6
+          py-4
+          border-b
+          border-slate-800
+        "
+      >
+
+        <div
+          className="
+            flex
+            items-center
+            gap-3
+          "
+        >
+
+          <div
+            className="
+              bg-blue-600
+              rounded-lg
+              p-2
+            "
+          >
+
+            <Bot
+              size={22}
+              className="text-white"
+            />
+
           </div>
 
+
           <div>
-            <h2 className="text-xl font-semibold text-white">
+
+            <h2
+              className="
+                text-white
+                font-semibold
+              "
+            >
               Resolve AI Coach
             </h2>
 
-            <p className="text-sm text-slate-400">
+
+            <p
+              className="
+                text-sm
+                text-slate-400
+              "
+            >
               Your personal recovery companion
             </p>
+
           </div>
+
+
         </div>
+
+
 
         <button
-          type="button"
-          onClick={clearMessages}
-          className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2 text-slate-300 transition hover:border-red-500 hover:text-red-400"
+
+          onClick={handleClear}
+
+          className="
+            flex
+            items-center
+            gap-2
+            text-sm
+            text-red-400
+            hover:text-red-300
+          "
+
         >
-          <Trash2 size={18} />
-          Clear Chat
+
+          <Trash2 size={16}/>
+
+          Clear
+
         </button>
+
+
       </div>
 
-      {/* Messages */}
-      <div className="flex h-[420px] flex-col gap-5 overflow-y-auto bg-slate-950 p-6">
-        {messages.map((message) => (
-          <ChatMessage
-            key={message.id}
-            role={message.role}
-            message={message.message}
-          />
-        ))}
 
-        {isTyping && <TypingIndicator />}
 
-        <div ref={messagesEndRef} />
-      </div>
 
-      {/* Suggested Prompts */}
-      <div className="border-t border-slate-800 bg-slate-900 p-4">
-        <p className="mb-3 text-sm font-medium text-slate-400">
-          Suggested prompts
-        </p>
 
-        <div className="flex flex-wrap gap-3">
-          {[
-            "💪 Motivate me",
-            "😊 Check my progress",
-            "🧠 Help with urges",
-            "🌙 Evening reflection",
-          ].map((prompt) => (
-            <button
-              key={prompt}
-              type="button"
-              onClick={() => setInput(prompt)}
-              className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:border-teal-500 hover:text-white"
+      {/* Chat Messages */}
+
+      <div
+        className="
+          h-[500px]
+          overflow-y-auto
+          p-6
+          space-y-5
+        "
+      >
+
+
+        {messages.length === 0 && (
+
+          <div
+            className="
+              text-center
+              text-slate-400
+              mt-20
+            "
+          >
+
+            <Bot
+              size={42}
+              className="
+                mx-auto
+                mb-4
+              "
+            />
+
+
+            <p>
+              Start a conversation with Resolve AI Coach.
+            </p>
+
+
+          </div>
+
+        )}
+
+
+
+
+
+        {messages.map(
+          (message) => (
+
+            <div
+
+              key={message.id}
+
+              className={`
+                flex
+                gap-3
+                items-start
+
+                ${
+                  message.role === "user"
+                    ? "justify-end"
+                    : "justify-start"
+                }
+              `}
+
             >
-              {prompt}
-            </button>
-          ))}
-        </div>
+
+
+              {
+                message.role ===
+                "assistant" && (
+
+                <Bot
+                  size={22}
+                  className="
+                    text-blue-400
+                    mt-1
+                  "
+                />
+
+              )
+              }
+
+
+
+              <div
+                className={`
+                  max-w-[75%]
+                  rounded-xl
+                  px-4
+                  py-3
+                  text-sm
+
+                  ${
+                    message.role === "user"
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-800 text-slate-200"
+                  }
+                `}
+              >
+
+                {message.content}
+
+              </div>
+
+
+
+
+              {
+                message.role ===
+                "user" && (
+
+                <User
+                  size={22}
+                  className="
+                    text-slate-400
+                    mt-1
+                  "
+                />
+
+              )
+              }
+
+
+            </div>
+
+          )
+        )}
+
+
+
+
+        {loading && (
+          <TypingIndicator />
+        )}
+
+
+
+        <div ref={bottomRef}/>
+
+
       </div>
+
+
+
+
 
       {/* Input */}
-      <div className="border-t border-slate-800 bg-slate-900 p-4">
-        <div className="flex gap-3">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleSend();
-              }
-            }}
-            placeholder="Type your message..."
-            className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-teal-500"
-          />
 
-          <button
-            type="button"
-            onClick={handleSend}
-            className="flex items-center gap-2 rounded-xl bg-teal-500 px-5 py-3 font-semibold text-slate-950 transition hover:bg-teal-400"
-          >
-            <Send size={18} />
-            Send
-          </button>
-        </div>
-      </div>
+      <form
+
+        onSubmit={handleSubmit}
+
+        className="
+          flex
+          gap-3
+          p-4
+          border-t
+          border-slate-800
+        "
+
+      >
+
+
+        <textarea
+
+          value={input}
+
+          onChange={(e) =>
+            setInput(e.target.value)
+          }
+
+
+          onKeyDown={(e) => {
+
+            if (
+              e.key === "Enter" &&
+              !e.shiftKey
+            ) {
+
+              e.preventDefault();
+
+              handleSubmit(
+                e as any
+              );
+
+            }
+
+          }}
+
+
+          placeholder="
+          Ask your AI Coach...
+          "
+
+
+          rows={1}
+
+
+          className="
+            flex-1
+            resize-none
+            rounded-lg
+            bg-slate-800
+            text-white
+            px-4
+            py-3
+            outline-none
+            focus:ring-2
+            focus:ring-blue-500
+          "
+
+        />
+
+
+
+        <button
+
+          disabled={
+            loading
+          }
+
+          className="
+            bg-blue-600
+            hover:bg-blue-700
+            disabled:opacity-50
+            text-white
+            rounded-lg
+            px-4
+          "
+
+        >
+
+          <Send size={20}/>
+
+        </button>
+
+
+      </form>
+
+
     </div>
+
   );
-}
-
-function getAIResponse(message: string, entries: any[]) {
-  const text = message.toLowerCase();
-
-  const totalEntries = entries.length;
-  const latestMood =
-    totalEntries > 0 ? entries[0].mood : null;
-
-  if (text.includes("progress")) {
-    if (totalEntries === 0) {
-      return "I don't see any journal entries yet. Try writing your first journal entry so I can help track your recovery over time.";
-    }
-
-    return `You've written ${totalEntries} journal ${
-      totalEntries === 1 ? "entry" : "entries"
-    }. Your latest recorded mood is "${latestMood}". That's useful information for understanding your recovery journey.`;
-  }
-
-  if (text.includes("motivate")) {
-    return `You've already taken an important step by using Resolve. ${
-      totalEntries > 0
-        ? `You've also written ${totalEntries} journal entries, showing consistency and commitment.`
-        : "Your first journal entry could be a great place to begin."
-    } Keep moving forward one day at a time.`;
-  }
-
-  if (text.includes("journal")) {
-    return totalEntries > 0
-      ? `You've written ${totalEntries} journal entries so far. Reflecting consistently is one of the best ways to recognize patterns and celebrate progress.`
-      : "You haven't written a journal entry yet. Journaling can help you recognize emotions, triggers, and personal growth over time.";
-  }
-
-  return `Thank you for sharing. I can see you've recorded ${totalEntries} journal ${
-    totalEntries === 1 ? "entry" : "entries"
-  }. I'm here to help you reflect, stay motivated, and build healthy habits one day at a time.`;
 }

@@ -3,6 +3,7 @@ import {
   Waves,
   BarChart3,
   Bot,
+  UserCircle2,
   Shield,
   Settings,
 } from "lucide-react";
@@ -29,6 +30,11 @@ const links = [
     label: "AI Coach",
     icon: Bot,
     path: "/ai-coach",
+  },
+  {
+    label: "Recovery Profile",
+    icon: UserCircle2,
+    path: "/recovery-profile",
   },
   {
     label: "Blocker",

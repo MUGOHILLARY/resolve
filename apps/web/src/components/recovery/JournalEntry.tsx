@@ -18,6 +18,14 @@ const moodEmoji = {
 export default function JournalEntry({ entry }: Props) {
   const deleteEntry = useJournalStore((state) => state.deleteEntry);
 
+  async function handleDelete() {
+    try {
+      await deleteEntry(entry.id);
+    } catch (error) {
+      console.error("Failed to delete journal:", error);
+    }
+  }
+
   return (
     <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 transition hover:border-teal-500/40">
       <div className="flex items-start justify-between">
@@ -44,7 +52,8 @@ export default function JournalEntry({ entry }: Props) {
         </div>
 
         <button
-          onClick={() => deleteEntry(entry.id)}
+          type="button"
+          onClick={handleDelete}
           className="rounded-xl p-2 text-slate-400 transition hover:bg-red-500/10 hover:text-red-400"
         >
           <Trash2 size={20} />

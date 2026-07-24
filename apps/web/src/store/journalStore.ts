@@ -1,8 +1,15 @@
 import { create } from "zustand";
 
-import { createJournal, getJournals } from "../lib/api";
+import {
+  loadJournals,
+  removeJournal,
+  saveJournal,
+} from "../services/journalService";
 
-import type { JournalEntry, Mood } from "../types/journal";
+import type {
+  JournalEntry,
+  Mood,
+} from "../types/journal";
 
 type JournalStore = {
   entries: JournalEntry[];
@@ -16,35 +23,42 @@ type JournalStore = {
     content: string
   ) => Promise<void>;
 
-  deleteEntry: (id: string) => void;
+  deleteEntry: (id: string) => Promise<void>;
 };
 
 export const useJournalStore = create<JournalStore>((set) => ({
   entries: [],
   loading: false,
 
+  /*
+  |--------------------------------------------------------------------------
+  | Load Journals
+  |--------------------------------------------------------------------------
+  */
+
   loadEntries: async () => {
     set({ loading: true });
 
     try {
-      const journals = await getJournals();
-
-      const entries: JournalEntry[] = journals.map((journal: any) => ({
-        id: journal.id,
-        mood: journal.mood,
-        title: journal.title,
-        content: journal.content,
-        date: new Date(journal.created_at).toLocaleDateString(),
-        createdAt: new Date(journal.created_at).getTime(),
-      }));
+      const journals = await loadJournals();
 
       set({
-        entries,
+        entries: journals.map((journal) => ({
+          id: journal.id,
+          mood: journal.mood as Mood,
+          title: journal.title,
+          content: journal.content,
+          date: new Date(
+            journal.created_at
+          ).toLocaleDateString(),
+          createdAt: new Date(
+            journal.created_at
+          ).getTime(),
+        })),
         loading: false,
       });
-
     } catch (error) {
-      console.error(error);
+      console.error("Failed to load journals:", error);
 
       set({
         loading: false,
@@ -52,21 +66,25 @@ export const useJournalStore = create<JournalStore>((set) => ({
     }
   },
 
+  /*
+  |--------------------------------------------------------------------------
+  | Save Journal
+  |--------------------------------------------------------------------------
+  */
+
   addEntry: async (mood, title, content) => {
-
     try {
-
-      const journal = await createJournal({
+      const journal = await saveJournal(
         mood,
         title,
-        content,
-      });
+        content
+      );
 
       set((state) => ({
         entries: [
           {
             id: journal.id,
-            mood: journal.mood,
+            mood: journal.mood as Mood,
             title: journal.title,
             content: journal.content,
             date: new Date(
@@ -79,19 +97,30 @@ export const useJournalStore = create<JournalStore>((set) => ({
           ...state.entries,
         ],
       }));
-
     } catch (error) {
-
-      console.error(error);
-
+      console.error("Failed to save journal:", error);
+      throw error;
     }
-
   },
 
-  deleteEntry: (id) =>
-    set((state) => ({
-      entries: state.entries.filter(
-        (entry) => entry.id !== id
-      ),
-    })),
+  /*
+  |--------------------------------------------------------------------------
+  | Delete Journal
+  |--------------------------------------------------------------------------
+  */
+
+  deleteEntry: async (id: string) => {
+    try {
+      await removeJournal(id);
+
+      set((state) => ({
+        entries: state.entries.filter(
+          (entry) => entry.id !== id
+        ),
+      }));
+    } catch (error) {
+      console.error("Failed to delete journal:", error);
+      throw error;
+    }
+  },
 }));
