@@ -1,8 +1,6 @@
 import { openai } from "../lib/openai.js";
 import { supabase } from "../lib/supabase.js";
-
 import { loadChatHistory } from "./chatService.js";
-import { getRecoveryProfile } from "./profileService.js";
 
 export async function generateAIReply(
   userId: string,
@@ -14,28 +12,33 @@ export async function generateAIReply(
   |--------------------------------------------------------------------------
   */
 
-  const profile =
-    await getRecoveryProfile(userId);
+  const { data: profile, error: profileError } = await supabase
+    .from("recovery_profiles")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (profileError) {
+    throw profileError;
+  }
 
   /*
   |--------------------------------------------------------------------------
-  | Load Journal Entries
+  | Load Recent Journal Entries
   |--------------------------------------------------------------------------
   */
 
-  const { data: journals, error } = await supabase
+  const { data: journals, error: journalError } = await supabase
     .from("journal_entries")
-    .select(
-      "mood,title,content,created_at"
-    )
+    .select("mood,title,content,created_at")
     .eq("user_id", userId)
     .order("created_at", {
       ascending: false,
     })
     .limit(10);
 
-  if (error) {
-    throw error;
+  if (journalError) {
+    throw journalError;
   }
 
   /*
@@ -44,8 +47,7 @@ export async function generateAIReply(
   |--------------------------------------------------------------------------
   */
 
-  const previousMessages =
-    await loadChatHistory(userId);
+  const previousMessages = await loadChatHistory(userId);
 
   /*
   |--------------------------------------------------------------------------
@@ -56,18 +58,39 @@ export async function generateAIReply(
   const profileContext = profile
     ? `
 Recovery Goal:
-${profile.goal}
+${profile.goal || "Not provided"}
+
+Motivation:
+${profile.motivation || "Not provided"}
+
+Current Recovery Streak:
+${profile.current_streak ?? 0} days
 
 Current Challenges:
-${profile.challenges}
+${profile.challenges || "Not provided"}
+
+Biggest Triggers:
+${profile.biggest_triggers || "Not provided"}
+
+Emergency Recovery Plan:
+${profile.emergency_plan || "Not provided"}
+
+Daily Habits:
+${profile.daily_habits || "Not provided"}
+
+Support Person:
+${profile.support_person || "Not provided"}
 
 Preferred Coaching Style:
-${profile.preferences}
+${profile.preferences || "Not provided"}
+
+Daily Reminder Time:
+${profile.reminder_time || "Not provided"}
+
+Additional Notes:
+${profile.notes || "Not provided"}
 `
-    : `
-The user has not created a recovery profile yet.
-Encourage them to complete one so coaching can be more personalized.
-`;
+    : "The user has not created a recovery profile yet.";
 
   /*
   |--------------------------------------------------------------------------
@@ -104,52 +127,72 @@ ${entry.content}
   const systemPrompt = `
 You are Resolve AI.
 
-You are an empathetic, supportive, and practical recovery coach.
+You are an expert recovery coach,
+habit-building specialist,
+behavioral psychologist,
+and accountability partner.
 
-Your objectives are:
+Your personality should always be:
 
-- Help users build healthy habits.
-- Encourage emotional reflection.
-- Support long-term recovery.
-- Never shame or judge.
-- Celebrate progress.
-- Offer practical next steps.
-- Remember previous conversations.
-- Use the user's recovery profile to personalize every response.
-- Use journal entries to identify emotional patterns.
-- Keep responses between 100 and 250 words unless more detail is requested.
+• Warm
+• Calm
+• Encouraging
+• Practical
+• Compassionate
+• Never judgmental
+• Never shame the user
 
-==============================
+Always personalize your responses using:
+
+1. Recovery Profile
+2. Journal History
+3. Previous Conversations
+
+Always:
+
+• Celebrate progress.
+• Reference previous achievements when appropriate.
+• Encourage consistency over perfection.
+• Detect patterns in emotions and habits.
+• Recommend small achievable next steps.
+• Mention the user's motivation when relevant.
+• Consider their biggest triggers.
+• Suggest using their emergency plan during difficult moments.
+• Adapt to the user's preferred coaching style.
+• Encourage healthy routines and self-reflection.
+
+Never invent facts that are not contained in the profile,
+journal history or previous conversations.
+
+Keep responses between 100 and 250 words unless the user asks for more detail.
+
+==================================================
+
 RECOVERY PROFILE
-==============================
 
 ${profileContext}
 
-==============================
+==================================================
+
 JOURNAL HISTORY
-==============================
 
 ${journalContext}
 `;
 
   /*
   |--------------------------------------------------------------------------
-  | Conversation History
+  | Previous Conversation
   |--------------------------------------------------------------------------
   */
 
-  const conversation = previousMessages.map(
-    (message) => ({
-      role: message.role as
-        | "user"
-        | "assistant",
-      content: message.message,
-    })
-  );
+  const conversation = previousMessages.map((msg) => ({
+    role: msg.role as "user" | "assistant",
+    content: msg.message,
+  }));
 
   /*
   |--------------------------------------------------------------------------
-  | Current Conversation
+  | GPT Input
   |--------------------------------------------------------------------------
   */
 
@@ -167,15 +210,14 @@ ${journalContext}
 
   /*
   |--------------------------------------------------------------------------
-  | GPT Response
+  | Generate AI Response
   |--------------------------------------------------------------------------
   */
 
-  const response =
-    await openai.responses.create({
-      model: "gpt-5-mini",
-      input,
-    });
+  const response = await openai.responses.create({
+    model: "gpt-5-mini",
+    input,
+  });
 
   return response.output_text;
 }

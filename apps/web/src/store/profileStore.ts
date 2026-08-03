@@ -1,9 +1,10 @@
 import { create } from "zustand";
 
-import type { RecoveryProfile } from "../services/profileService";
+import type { RecoveryProfile } from "../lib/api";
 
 interface ProfileState {
   profile: RecoveryProfile | null;
+
   loading: boolean;
 
   setProfile: (
@@ -19,7 +20,6 @@ interface ProfileState {
 
 export const useProfileStore =
   create<ProfileState>((set) => ({
-
     profile: null,
 
     loading: false,
@@ -39,5 +39,4 @@ export const useProfileStore =
         profile: null,
         loading: false,
       }),
-
   }));

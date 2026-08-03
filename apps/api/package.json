@@ -10,12 +10,16 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.7",
+    "compression": "^1.8.1",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "helmet": "^8.3.0",
     "openai": "^6.47.0"
   },
   "devDependencies": {
+    "@types/compression": "^1.8.1",
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^24.13.2",
     "tsx": "^4.23.1",

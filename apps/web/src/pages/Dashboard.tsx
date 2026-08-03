@@ -29,7 +29,9 @@ export default function Dashboard() {
       <WelcomeBanner />
 
       {/* Dashboard Statistics */}
+
       <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+
         <InsightCard
           icon={<Flame size={22} />}
           title="Recovery Streak"
@@ -68,23 +70,31 @@ export default function Dashboard() {
           progress={100}
           progressColor="bg-cyan-500"
         />
+
       </section>
 
       {/* Charts & Quick Actions */}
+
       <section className="grid gap-6 lg:grid-cols-3">
+
         <div className="lg:col-span-2">
           <WeeklyChart />
         </div>
 
         <QuickActions />
+
       </section>
 
       {/* Bottom Section */}
+
       <section className="grid gap-6 lg:grid-cols-2">
+
         <RecoveryScore />
 
         <RecentActivity />
+
       </section>
+
     </div>
   );
 }

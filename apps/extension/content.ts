@@ -1,0 +1,1 @@
+console.log("Resolve content script loaded.");

@@ -1,0 +1,22 @@
+{
+  "name": "@resolve/cli",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "resolve": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "commander": "^14.0.0",
+    "fs-extra": "^11.3.0"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}

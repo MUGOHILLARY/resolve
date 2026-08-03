@@ -1,24 +1,32 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 
 import MainLayout from "../components/layout/MainLayout";
-
-import ProtectedRoute from "./ProtectedRoute";
-
-import Dashboard from "../pages/Dashboard";
-import Recovery from "../pages/Recovery";
-import Analytics from "../pages/Analytics";
-import AICoach from "../pages/AICoach";
-import RecoveryProfile from "../pages/RecoveryProfile";
-import Blocker from "../pages/Blocker";
-import Settings from "../pages/Settings";
+import ProtectedRoute from "../components/auth/ProtectedRoute";
 
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
 
+import Dashboard from "../pages/Dashboard";
+
+import RecoveryOverview from "../pages/RecoveryOverview";
+import RecoveryJournal from "../pages/RecoveryJournal";
+import RecoveryCalendar from "../pages/RecoveryCalendar";
+import RecoveryTimeline from "../pages/RecoveryTimeline";
+import RecoveryInsights from "../pages/RecoveryInsights";
+import RecoveryAchievements from "../pages/RecoveryAchievements";
+import RecoveryProfile from "../pages/RecoveryProfile";
+import RecoveryPolicy from "../pages/RecoveryPolicy";
+
+import Analytics from "../pages/Analytics";
+import AICoach from "../pages/AICoach";
+import Blocker from "../pages/Blocker";
+import Settings from "../pages/Settings";
+
 export default function AppRouter() {
   return (
     <Routes>
-      {/* Public Routes */}
+
+      {/* ---------- Public Routes ---------- */}
 
       <Route
         path="/login"
@@ -30,7 +38,7 @@ export default function AppRouter() {
         element={<Register />}
       />
 
-      {/* Protected Routes */}
+      {/* ---------- Protected App ---------- */}
 
       <Route
         element={
@@ -46,7 +54,42 @@ export default function AppRouter() {
 
         <Route
           path="/recovery"
-          element={<Recovery />}
+          element={<RecoveryOverview />}
+        />
+
+        <Route
+          path="/recovery/journal"
+          element={<RecoveryJournal />}
+        />
+
+        <Route
+          path="/recovery/calendar"
+          element={<RecoveryCalendar />}
+        />
+
+        <Route
+          path="/recovery/timeline"
+          element={<RecoveryTimeline />}
+        />
+
+        <Route
+          path="/recovery/insights"
+          element={<RecoveryInsights />}
+        />
+
+        <Route
+          path="/recovery/achievements"
+          element={<RecoveryAchievements />}
+        />
+
+        <Route
+          path="/recovery/profile"
+          element={<RecoveryProfile />}
+        />
+
+        <Route
+          path="/recovery/policy"
+          element={<RecoveryPolicy />}
         />
 
         <Route
@@ -60,11 +103,6 @@ export default function AppRouter() {
         />
 
         <Route
-          path="/recovery-profile"
-          element={<RecoveryProfile />}
-        />
-
-        <Route
           path="/blocker"
           element={<Blocker />}
         />
@@ -75,12 +113,13 @@ export default function AppRouter() {
         />
       </Route>
 
-      {/* Catch-all */}
+      {/* ---------- Catch All ---------- */}
 
       <Route
         path="*"
         element={<Navigate to="/" replace />}
       />
+
     </Routes>
   );
 }

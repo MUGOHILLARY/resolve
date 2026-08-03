@@ -1,0 +1,7 @@
+{
+  "name": "@resolve/blocklist-manager",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./src/index.ts"
+}

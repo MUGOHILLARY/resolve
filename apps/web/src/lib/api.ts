@@ -24,10 +24,45 @@ export type Journal = {
 };
 
 export type ChatMessage = {
-  id: string;
+  id?: string;
+
   role: "user" | "assistant";
-  message: string;
-  created_at: string;
+
+  // Backend field
+  message?: string;
+
+  // Frontend field
+  content?: string;
+
+  created_at?: string;
+};
+
+export type RecoveryProfile = {
+  id?: string;
+  user_id?: string;
+
+  goal: string;
+  challenges: string;
+  preferences: string;
+
+  current_streak: number;
+
+  biggest_triggers: string;
+
+  emergency_plan: string;
+
+  daily_habits: string;
+
+  support_person: string;
+
+  motivation: string;
+
+  reminder_time: string;
+
+  notes: string;
+
+  created_at?: string;
+  updated_at?: string;
 };
 
 /*
@@ -60,30 +95,43 @@ async function getAuthHeaders() {
 export async function createJournal(
   journal: CreateJournalRequest
 ): Promise<Journal> {
-  const response = await fetch(`${API_BASE_URL}/api/journal`, {
-    method: "POST",
-    headers: await getAuthHeaders(),
-    body: JSON.stringify(journal),
-  });
+  const response = await fetch(
+    `${API_BASE_URL}/api/journal`,
+    {
+      method: "POST",
+      headers: await getAuthHeaders(),
+      body: JSON.stringify(journal),
+    }
+  );
 
   const data = await response.json();
 
   if (!response.ok || !data.success) {
-    throw new Error(data.message ?? "Failed to save journal.");
+    throw new Error(
+      data.message ?? "Failed to save journal."
+    );
   }
 
   return data.journal;
 }
 
-export async function getJournals(): Promise<Journal[]> {
-  const response = await fetch(`${API_BASE_URL}/api/journal`, {
-    headers: await getAuthHeaders(),
-  });
+export async function getJournals(): Promise<
+  Journal[]
+> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/journal`,
+    {
+      headers: await getAuthHeaders(),
+    }
+  );
 
   const data = await response.json();
 
   if (!response.ok || !data.success) {
-    throw new Error(data.message ?? "Failed to load journals.");
+    throw new Error(
+      data.message ??
+        "Failed to load journals."
+    );
   }
 
   return data.journals;
@@ -103,7 +151,10 @@ export async function deleteJournal(
   const data = await response.json();
 
   if (!response.ok || !data.success) {
-    throw new Error(data.message ?? "Failed to delete journal.");
+    throw new Error(
+      data.message ??
+        "Failed to delete journal."
+    );
   }
 }
 
@@ -116,24 +167,32 @@ export async function deleteJournal(
 export async function sendChat(
   message: string
 ): Promise<string> {
-  const response = await fetch(`${API_BASE_URL}/api/chat`, {
-    method: "POST",
-    headers: await getAuthHeaders(),
-    body: JSON.stringify({
-      message,
-    }),
-  });
+  const response = await fetch(
+    `${API_BASE_URL}/api/chat`,
+    {
+      method: "POST",
+      headers: await getAuthHeaders(),
+      body: JSON.stringify({
+        message,
+      }),
+    }
+  );
 
   const data = await response.json();
 
   if (!response.ok || !data.success) {
-    throw new Error(data.message ?? "Failed to send message.");
+    throw new Error(
+      data.message ??
+        "Failed to send message."
+    );
   }
 
   return data.reply;
 }
 
-export async function loadHistory(): Promise<ChatMessage[]> {
+export async function loadHistory(): Promise<
+  ChatMessage[]
+> {
   const response = await fetch(
     `${API_BASE_URL}/api/chat/history`,
     {
@@ -144,7 +203,10 @@ export async function loadHistory(): Promise<ChatMessage[]> {
   const data = await response.json();
 
   if (!response.ok || !data.success) {
-    throw new Error(data.message ?? "Failed to load history.");
+    throw new Error(
+      data.message ??
+        "Failed to load history."
+    );
   }
 
   return data.messages;
@@ -162,6 +224,83 @@ export async function clearHistory(): Promise<void> {
   const data = await response.json();
 
   if (!response.ok || !data.success) {
-    throw new Error(data.message ?? "Failed to clear history.");
+    throw new Error(
+      data.message ??
+        "Failed to clear history."
+    );
   }
+}
+
+/*
+|--------------------------------------------------------------------------
+| RECOVERY PROFILE
+|--------------------------------------------------------------------------
+*/
+
+export async function getProfile(): Promise<RecoveryProfile | null> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/profile`,
+    {
+      headers: await getAuthHeaders(),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data.message ??
+        "Failed to load profile."
+    );
+  }
+
+  return data.profile;
+}
+
+export async function createProfile(
+  profile: RecoveryProfile
+): Promise<RecoveryProfile> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/profile`,
+    {
+      method: "POST",
+      headers: await getAuthHeaders(),
+      body: JSON.stringify(profile),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data.message ??
+        "Failed to create profile."
+    );
+  }
+
+  return data.profile;
+}
+
+export async function updateProfile(
+  profile: Partial<RecoveryProfile>
+): Promise<RecoveryProfile> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/profile`,
+    {
+      method: "PUT",
+      headers: await getAuthHeaders(),
+      body: JSON.stringify(profile),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data.message ??
+        "Failed to update profile."
+    );
+  }
+
+  return data.profile;
 }

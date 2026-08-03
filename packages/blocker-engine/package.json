@@ -1,0 +1,11 @@
+{
+  "name": "@resolve/blocker-engine",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "dependencies": {
+    "@resolve/types": "workspace:*",
+    "zod": "^4.1.5"
+  }
+}

@@ -1,5 +1,4 @@
 import { create } from "zustand";
-
 import type {
   Session,
   User,
@@ -45,6 +44,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({
       session,
       user,
+      loading: false,
     }),
 
   setLoading: (loading) =>
@@ -62,5 +62,11 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   logout: async () => {
     await signOut();
+
+    set({
+      session: null,
+      user: null,
+      loading: false,
+    });
   },
 }));

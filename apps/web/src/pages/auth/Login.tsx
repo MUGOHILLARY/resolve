@@ -16,7 +16,6 @@ export default function Login() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [error, setError] = useState("");
 
   async function handleSubmit(
@@ -28,7 +27,6 @@ export default function Login() {
 
     try {
       await login(email, password);
-
       navigate("/recovery");
     } catch (err: any) {
       setError(err?.message ?? "Login failed.");
@@ -37,9 +35,27 @@ export default function Login() {
 
   return (
     <AuthCard
-      title="Welcome Back"
-      subtitle="Sign in to continue your recovery journey."
+      title=""
+      subtitle=""
     >
+      <div className="mb-8 flex flex-col items-center">
+
+        <img
+          src="/resolve-logo.png"
+          alt="Resolve"
+          className="mb-5 h-24 w-24 object-contain drop-shadow-2xl"
+        />
+
+        <h1 className="text-4xl font-bold text-white">
+          Welcome Back
+        </h1>
+
+        <p className="mt-3 text-center text-slate-400">
+          Sign in to continue your recovery journey.
+        </p>
+
+      </div>
+
       <form
         onSubmit={handleSubmit}
         className="space-y-5"
@@ -72,15 +88,19 @@ export default function Login() {
           Sign In
         </AuthButton>
 
-        <p className="text-center text-sm text-slate-400">
+        <div className="text-center text-sm text-slate-400">
+
           Don't have an account?{" "}
+
           <Link
             to="/register"
-            className="font-medium text-teal-400 hover:text-teal-300"
+            className="font-semibold text-teal-400 transition hover:text-teal-300"
           >
             Create one
           </Link>
-        </p>
+
+        </div>
+
       </form>
     </AuthCard>
   );

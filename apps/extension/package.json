@@ -1,0 +1,25 @@
+{
+  "name": "extension",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Resolve Chrome Extension",
+  "type": "module",
+  "scripts": {
+    "dev": "node build.cjs --watch",
+    "build": "node build.cjs",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "resolve",
+    "chrome-extension",
+    "website-blocker",
+    "recovery"
+  ],
+  "author": "Resolve",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/chrome": "^0.2.2",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.9.2"
+  }
+}
