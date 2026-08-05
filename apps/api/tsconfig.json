@@ -2,13 +2,40 @@
   "extends": "../../tsconfig.base.json",
 
   "compilerOptions": {
+    "target": "ES2022",
+
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+
+    "rootDir": "src",
     "outDir": "dist",
-    "module": "ES2022",
-    "moduleResolution": "Bundler"
+
+    "noEmit": false,
+
+    "declaration": false,
+    "sourceMap": true,
+
+    "types": ["node"],
+
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+
+    "resolveJsonModule": true,
+
+    "skipLibCheck": true,
+
+    "strict": true
   },
 
   "include": [
-    "*.ts",
     "src/**/*.ts"
+  ],
+
+  "exclude": [
+    "dist",
+    "node_modules",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "src/test-supabase.ts"
   ]
 }

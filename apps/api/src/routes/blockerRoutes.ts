@@ -1,17 +1,24 @@
 import { Router } from "express";
 
-import { requireAuth } from "../middleware/requireAuth";
-
-import {
-  getBlockerSettings,
-} from "../controllers/blockerController";
+import { requireAuth } from "../middleware/requireAuth.js";
+import { getBlockerSettings } from "../controllers/blockerController.js";
 
 const router = Router();
 
-router.get(
-  "/settings",
-  requireAuth,
-  getBlockerSettings
-);
+/*
+|--------------------------------------------------------------------------
+| Authentication
+|--------------------------------------------------------------------------
+*/
+
+router.use(requireAuth);
+
+/*
+|--------------------------------------------------------------------------
+| Blocker Settings
+|--------------------------------------------------------------------------
+*/
+
+router.get("/", getBlockerSettings);
 
 export default router;

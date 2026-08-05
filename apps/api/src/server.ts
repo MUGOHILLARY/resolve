@@ -1,8 +1,10 @@
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import helmet from "helmet";
 import compression from "compression";
+
+import { env } from "./config/env.js";
+import requestLogger from "./middleware/requestLogger.js";
 
 import healthRoutes from "./routes/healthRoutes.js";
 import journalRoutes from "./routes/journalRoutes.js";
@@ -11,9 +13,15 @@ import profileRoutes from "./routes/profileRoutes.js";
 import blockerRoutes from "./routes/blockerRoutes.js";
 import eventRoutes from "./routes/eventRoutes.js";
 
-dotenv.config();
-
 const app = express();
+
+/*
+|--------------------------------------------------------------------------
+| Express Configuration
+|--------------------------------------------------------------------------
+*/
+
+app.set("trust proxy", 1);
 
 /*
 |--------------------------------------------------------------------------
@@ -23,7 +31,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: env.FRONTEND_URL,
     credentials: true,
   })
 );
@@ -33,6 +41,8 @@ app.use(helmet());
 app.use(compression());
 
 app.use(express.json());
+
+app.use(requestLogger);
 
 /*
 |--------------------------------------------------------------------------
@@ -84,12 +94,11 @@ app.use(
     res: express.Response,
     next: express.NextFunction
   ) => {
-    console.error(err);
+    console.error("❌", err);
 
     res.status(err.status || 500).json({
       success: false,
-      message:
-        err.message || "Internal server error.",
+      message: err.message || "Internal server error.",
     });
   }
 );
@@ -100,14 +109,32 @@ app.use(
 |--------------------------------------------------------------------------
 */
 
-const PORT = Number(process.env.PORT) || 4000;
-
-app.listen(PORT, () => {
-  console.log(
-    `🚀 Resolve API running on http://localhost:${PORT}`
-  );
-
-  console.log(
-    `📡 Event API ready at http://localhost:${PORT}/api/events`
-  );
+const server = app.listen(env.PORT, () => {
+  console.log("========================================");
+  console.log("🛡️  Resolve API Started Successfully");
+  console.log("========================================");
+  console.log(`🌍 Environment : ${env.NODE_ENV}`);
+  console.log(`📡 Port        : ${env.PORT}`);
+  console.log(`🌐 Frontend    : ${env.FRONTEND_URL}`);
+  console.log(`❤️ Health      : http://localhost:${env.PORT}/`);
+  console.log("========================================");
 });
+
+/*
+|--------------------------------------------------------------------------
+| Graceful Shutdown
+|--------------------------------------------------------------------------
+*/
+
+function shutdown(signal: string) {
+  console.log(`\n⚠️ Received ${signal}`);
+  console.log("Closing Resolve API...");
+
+  server.close(() => {
+    console.log("✅ HTTP server closed.");
+    process.exit(0);
+  });
+}
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
