@@ -1,14 +1,24 @@
 import {
   LayoutDashboard,
   HeartHandshake,
+  BookOpen,
+  User,
+  Calendar,
+  Clock3,
+  Lightbulb,
+  Trophy,
+  ShieldCheck,
   BarChart3,
   Bot,
   Shield,
   Settings,
   LogOut,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 
 import { NavLink, useNavigate } from "react-router-dom";
+import { useState } from "react";
 
 import { useAuthStore } from "../../store/authStore";
 
@@ -16,6 +26,8 @@ export default function Sidebar() {
   const logout = useAuthStore((state) => state.logout);
 
   const navigate = useNavigate();
+
+  const [recoveryOpen, setRecoveryOpen] = useState(true);
 
   async function handleLogout() {
     await logout();
@@ -27,6 +39,13 @@ export default function Sidebar() {
       isActive
         ? "bg-teal-500 text-white shadow-lg"
         : "text-slate-300 hover:bg-slate-800 hover:text-white"
+    }`;
+
+  const subLinkClass = ({ isActive }: { isActive: boolean }) =>
+    `ml-6 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
+      isActive
+        ? "bg-slate-800 text-teal-400"
+        : "text-slate-400 hover:bg-slate-900 hover:text-white"
     }`;
 
   return (
@@ -60,31 +79,108 @@ export default function Sidebar() {
 
       {/* Navigation */}
 
-      <nav className="flex-1 space-y-2 p-4">
+      <nav className="flex-1 overflow-y-auto p-4 space-y-2">
 
-        <NavLink
-          to="/"
-          end
-          className={linkClass}
-        >
+        <NavLink to="/" end className={linkClass}>
           <LayoutDashboard size={20} />
-          <span>Dashboard</span>
+          Dashboard
         </NavLink>
 
-        <NavLink
-          to="/recovery"
-          className={linkClass}
+        {/* Recovery Section */}
+
+        <button
+          onClick={() => setRecoveryOpen(!recoveryOpen)}
+          className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-slate-300 hover:bg-slate-800"
         >
-          <HeartHandshake size={20} />
-          <span>Recovery</span>
-        </NavLink>
+          <div className="flex items-center gap-3">
+            <HeartHandshake size={20} />
+            <span>Recovery</span>
+          </div>
+
+          {recoveryOpen ? (
+            <ChevronDown size={18} />
+          ) : (
+            <ChevronRight size={18} />
+          )}
+        </button>
+
+        {recoveryOpen && (
+          <div className="space-y-1">
+
+            <NavLink
+              to="/recovery"
+              end
+              className={subLinkClass}
+            >
+              <HeartHandshake size={16} />
+              Overview
+            </NavLink>
+
+            <NavLink
+              to="/recovery/journal"
+              className={subLinkClass}
+            >
+              <BookOpen size={16} />
+              Journal
+            </NavLink>
+
+            <NavLink
+              to="/recovery/profile"
+              className={subLinkClass}
+            >
+              <User size={16} />
+              Profile
+            </NavLink>
+
+            <NavLink
+              to="/recovery/calendar"
+              className={subLinkClass}
+            >
+              <Calendar size={16} />
+              Calendar
+            </NavLink>
+
+            <NavLink
+              to="/recovery/timeline"
+              className={subLinkClass}
+            >
+              <Clock3 size={16} />
+              Timeline
+            </NavLink>
+
+            <NavLink
+              to="/recovery/insights"
+              className={subLinkClass}
+            >
+              <Lightbulb size={16} />
+              Insights
+            </NavLink>
+
+            <NavLink
+              to="/recovery/achievements"
+              className={subLinkClass}
+            >
+              <Trophy size={16} />
+              Achievements
+            </NavLink>
+
+            <NavLink
+              to="/recovery/policy"
+              className={subLinkClass}
+            >
+              <ShieldCheck size={16} />
+              Recovery Policy
+            </NavLink>
+
+          </div>
+        )}
 
         <NavLink
           to="/analytics"
           className={linkClass}
         >
           <BarChart3 size={20} />
-          <span>Analytics</span>
+          Analytics
         </NavLink>
 
         <NavLink
@@ -92,7 +188,7 @@ export default function Sidebar() {
           className={linkClass}
         >
           <Bot size={20} />
-          <span>AI Coach</span>
+          AI Coach
         </NavLink>
 
         <NavLink
@@ -100,7 +196,7 @@ export default function Sidebar() {
           className={linkClass}
         >
           <Shield size={20} />
-          <span>Website Blocker</span>
+          Website Blocker
         </NavLink>
 
         <NavLink
@@ -108,7 +204,7 @@ export default function Sidebar() {
           className={linkClass}
         >
           <Settings size={20} />
-          <span>Settings</span>
+          Settings
         </NavLink>
 
       </nav>
@@ -122,9 +218,7 @@ export default function Sidebar() {
           className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-slate-300 transition hover:bg-red-600 hover:text-white"
         >
           <LogOut size={20} />
-
-          <span>Logout</span>
-
+          Logout
         </button>
 
       </div>
