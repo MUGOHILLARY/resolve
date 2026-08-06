@@ -2,10 +2,30 @@
   "extends": "../../tsconfig.base.json",
 
   "compilerOptions": {
-    "jsx": "react-jsx"
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+
+    "jsx": "react-jsx",
+
+    "types": ["vite/client"],
+
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+
+    "isolatedModules": true,
+    "noEmit": true,
+
+    "strict": true,
+
+    "baseUrl": "."
   },
 
   "include": [
-    "src"
+    "src",
+    "vite.config.ts",
+    "vite-env.d.ts"
   ]
 }

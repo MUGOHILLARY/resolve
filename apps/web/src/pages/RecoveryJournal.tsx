@@ -1,9 +1,17 @@
+import { useState } from "react";
+
 import JournalToolbar from "../components/recovery/JournalToolbar";
 import MoodSelector from "../components/recovery/MoodSelector";
 import JournalEditor from "../components/recovery/JournalEditor";
 import JournalList from "../components/recovery/JournalList";
 
+import type { Mood } from "../types/journal";
+
 export default function RecoveryJournal() {
+  const [search, setSearch] = useState("");
+  const [filterMood, setFilterMood] = useState<Mood | "all">("all");
+  const [selectedMood, setSelectedMood] = useState<Mood>("good");
+
   return (
     <div className="space-y-8">
       <div>
@@ -16,9 +24,17 @@ export default function RecoveryJournal() {
         </p>
       </div>
 
-      <JournalToolbar />
+      <JournalToolbar
+        search={search}
+        onSearchChange={setSearch}
+        mood={filterMood}
+        onMoodChange={setFilterMood}
+      />
 
-      <MoodSelector />
+      <MoodSelector
+        value={selectedMood}
+        onChange={setSelectedMood}
+      />
 
       <JournalEditor />
 

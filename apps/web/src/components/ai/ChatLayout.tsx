@@ -20,7 +20,7 @@ import {
 
 import {
   useChatStore,
-} from "../../store/chatStore";
+} from "../../store/ChatStore";
 
 import TypingIndicator from "./TypingIndicator";
 

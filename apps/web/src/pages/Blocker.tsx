@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { supabase } from "../lib/supabase";
 
 import {
   BlockerHeader,
@@ -27,7 +26,6 @@ export default function Blocker() {
   } = useBlockerStore();
 
   const [loading, setLoading] = useState(true);
-  const [userId, setUserId] = useState("");
 
   useEffect(() => {
     initialize();
@@ -35,19 +33,7 @@ export default function Blocker() {
 
   async function initialize() {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
-      setUserId(user.id);
-
-      const data = await getBlockerSettings(user.id);
-
+      const data = await getBlockerSettings();
       setSettings(data);
     } catch (error) {
       console.error(error);
@@ -73,14 +59,10 @@ export default function Blocker() {
     });
 
     try {
-      const updated =
-        await updateBlockerSettings(
-          userId,
-          {
-            ...settings,
-            [key]: value,
-          }
-        );
+      const updated = await updateBlockerSettings({
+        ...settings,
+        [key]: value,
+      });
 
       setSettings(updated);
     } catch (error) {
@@ -95,43 +77,25 @@ export default function Blocker() {
   async function addWebsite(site: string) {
     if (!settings) return;
 
-    const website = site
-      .trim()
-      .toLowerCase();
+    const website = site.trim().toLowerCase();
 
     if (!website) return;
 
-    if (
-      settings.custom_sites.includes(
-        website
-      )
-    ) {
+    if (settings.custom_sites.includes(website)) {
       return;
     }
 
     try {
-      const updated =
-        await addCustomWebsite(
-          userId,
-          website
-        );
-
+      const updated = await addCustomWebsite(website);
       setSettings(updated);
     } catch (error) {
       console.error(error);
     }
   }
 
-  async function removeWebsite(
-    website: string
-  ) {
+  async function removeWebsite(site: string) {
     try {
-      const updated =
-        await removeCustomWebsite(
-          userId,
-          website
-        );
-
+      const updated = await removeCustomWebsite(site);
       setSettings(updated);
     } catch (error) {
       console.error(error);
@@ -143,18 +107,14 @@ export default function Blocker() {
     years: number
   ) {
     try {
-      const updated =
-        await activateRecoveryLock(
-          userId,
-          level,
-          years
-        );
+      const updated = await activateRecoveryLock(
+        level,
+        years
+      );
 
       setSettings(updated);
 
-      alert(
-        "Recovery Lock Activated Successfully."
-      );
+      alert("Recovery Lock Activated Successfully.");
     } catch (error) {
       console.error(error);
     }
@@ -178,26 +138,14 @@ export default function Blocker() {
 
   return (
     <div className="space-y-8">
-
       <BlockerHeader />
 
       <RecoveryLockCard
-        enabled={
-          settings.recovery_lock_enabled
-        }
-        level={
-          settings.recovery_lock_level ??
-          "None"
-        }
-        expires={
-          settings.recovery_lock_until
-        }
-        reason={
-          settings.recovery_lock_reason
-        }
-        onActivate={
-          handleRecoveryLock
-        }
+        enabled={settings.recovery_lock_enabled}
+        level={settings.recovery_lock_level ?? "None"}
+        expires={settings.recovery_lock_until}
+        reason={settings.recovery_lock_reason}
+        onActivate={handleRecoveryLock}
       />
 
       <CategoryCards
@@ -210,12 +158,9 @@ export default function Blocker() {
       />
 
       <WebsiteList
-        websites={
-          settings.custom_sites
-        }
+        websites={settings.custom_sites}
         onDelete={removeWebsite}
       />
-
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { authService } from "../services/authService";
+import { getSession } from "../services/authService";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ?? "http://localhost:4000";
@@ -11,7 +11,7 @@ export type ChatMessage = {
 };
 
 async function authHeaders(): Promise<Record<string, string>> {
-  const session = await authService.getSession();
+  const session = await getSession();
 
   if (!session?.access_token) {
     throw new Error("Not authenticated.");
