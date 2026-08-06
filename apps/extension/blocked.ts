@@ -1,30 +1,57 @@
-import { startBreathing } from "./breathing";
+import { quotes } from "./quotes";
+import { startBreathingAnimation } from "./breathing";
 import { loadStats } from "./stats";
-import { loadQuote } from "./quotes";
 
-document.addEventListener("DOMContentLoaded", async () => {
-  // Start breathing animation
-  startBreathing();
+const quoteElement = document.getElementById("quote") as HTMLElement;
+const coachButton = document.getElementById("coach") as HTMLButtonElement;
+const journalButton = document.getElementById("journal") as HTMLButtonElement;
+const backButton = document.getElementById("back") as HTMLButtonElement;
 
-  // Load recovery statistics
-  await loadStats();
+// Start breathing animation
+startBreathingAnimation();
 
-  // Display a motivational quote
-  loadQuote();
+// Load recovery statistics
+loadStats();
 
-  // Go Back button
-  const backButton = document.getElementById("back");
+// Show a random quote immediately
+function updateQuote() {
+  if (!quoteElement) return;
 
-  backButton?.addEventListener("click", () => {
-    history.back();
+  const random =
+    quotes[Math.floor(Math.random() * quotes.length)];
+
+  quoteElement.textContent = random;
+}
+
+updateQuote();
+
+// Change quote every 15 seconds
+setInterval(updateQuote, 15000);
+
+// Return to a safe page
+backButton?.addEventListener("click", () => {
+  chrome.tabs.query(
+    { active: true, currentWindow: true },
+    (tabs) => {
+      if (!tabs[0]?.id) return;
+
+      chrome.tabs.update(tabs[0].id, {
+        url: "https://www.google.com",
+      });
+    }
+  );
+});
+
+// Open Resolve AI Coach
+coachButton?.addEventListener("click", () => {
+  chrome.tabs.create({
+    url: "http://localhost:5173/ai-coach",
   });
+});
 
-  // AI Coach button
-  const coachButton = document.getElementById("coach");
-
-  coachButton?.addEventListener("click", () => {
-    chrome.tabs.create({
-      url: "http://localhost:5173/ai-coach",
-    });
+// Open Resolve Journal
+journalButton?.addEventListener("click", () => {
+  chrome.tabs.create({
+    url: "http://localhost:5173/journal",
   });
 });

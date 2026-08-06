@@ -61,26 +61,37 @@ function buildWebsiteList(settings) {
 
 // background/blockerEngine.ts
 async function applyBlockingRules(websites) {
-  const existing = await chrome.declarativeNetRequest.getDynamicRules();
-  await chrome.declarativeNetRequest.updateDynamicRules({
-    removeRuleIds: existing.map((rule) => rule.id),
-    addRules: websites.map((site, index) => ({
+  try {
+    const existing = await chrome.declarativeNetRequest.getDynamicRules();
+    if (existing.length > 0) {
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: existing.map((rule) => rule.id)
+      });
+    }
+    const blockedPage = chrome.runtime.getURL("blocked.html");
+    const rules = websites.map((site, index) => ({
       id: index + 1,
       priority: 1,
       action: {
-        type: "block"
+        type: chrome.declarativeNetRequest.RuleActionType.REDIRECT,
+        redirect: {
+          url: blockedPage
+        }
       },
       condition: {
-        urlFilter: `||${site}`,
+        requestDomains: [site],
         resourceTypes: [
-          "main_frame"
+          chrome.declarativeNetRequest.ResourceType.MAIN_FRAME
         ]
       }
-    }))
-  });
-  console.log(
-    `Resolve loaded ${websites.length} blocking rules`
-  );
+    }));
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      addRules: rules
+    });
+    console.log(`\u2705 Resolve installed ${rules.length} redirect rules.`);
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 // events/eventBus.ts
@@ -113,6 +124,28 @@ async function emitEvent(event) {
   }
 }
 
+// stats.ts
+var DEFAULT_STATS = {
+  streak: 0,
+  blockedToday: 0,
+  moneySaved: 0,
+  lastBlockedDate: ""
+};
+async function recordBlockedAttempt() {
+  const today = (/* @__PURE__ */ new Date()).toDateString();
+  const result = await chrome.storage.local.get("resolveStats");
+  const stats = result.resolveStats ?? DEFAULT_STATS;
+  if (stats.lastBlockedDate !== today) {
+    stats.blockedToday = 0;
+    stats.lastBlockedDate = today;
+  }
+  stats.blockedToday++;
+  stats.moneySaved += 250;
+  await chrome.storage.local.set({
+    resolveStats: stats
+  });
+}
+
 // background.ts
 var blockedSites = [];
 async function initialize() {
@@ -120,19 +153,21 @@ async function initialize() {
     const settings = await getSettings();
     blockedSites = buildWebsiteList(settings);
     await applyBlockingRules(blockedSites);
-    console.log("\u2705 Resolve initialized.");
+    console.log(
+      `\u2705 Resolve initialized with ${blockedSites.length} blocked websites.`
+    );
   } catch (err) {
     console.error("Resolve initialization failed:", err);
   }
 }
-chrome.runtime.onInstalled.addListener(() => {
-  initialize();
+chrome.runtime.onInstalled.addListener(async () => {
+  await initialize();
 });
-chrome.runtime.onStartup.addListener(() => {
-  initialize();
+chrome.runtime.onStartup.addListener(async () => {
+  await initialize();
 });
-chrome.storage.onChanged.addListener(() => {
-  initialize();
+chrome.storage.onChanged.addListener(async () => {
+  await initialize();
 });
 chrome.webNavigation.onBeforeNavigate.addListener(
   async (details) => {
@@ -145,6 +180,7 @@ chrome.webNavigation.onBeforeNavigate.addListener(
       );
       if (!blocked) return;
       console.log(`\u{1F6E1} Blocked: ${hostname}`);
+      await recordBlockedAttempt();
       await emitEvent({
         type: "site_blocked",
         payload: {
@@ -152,11 +188,8 @@ chrome.webNavigation.onBeforeNavigate.addListener(
           timestamp: Date.now()
         }
       });
-      chrome.tabs.update(details.tabId, {
-        url: chrome.runtime.getURL("blocked.html")
-      });
     } catch (err) {
-      console.error("Blocking error:", err);
+      console.error("Blocking logger error:", err);
     }
   }
 );

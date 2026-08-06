@@ -2,6 +2,7 @@ import { getSettings } from "./storage/settings";
 import { buildWebsiteList } from "./rules/buildRules";
 import { applyBlockingRules } from "./background/blockerEngine";
 import { emitEvent } from "./events/eventBus";
+import { recordBlockedAttempt } from "./stats";
 
 let blockedSites: string[] = [];
 
@@ -13,7 +14,9 @@ async function initialize() {
 
     await applyBlockingRules(blockedSites);
 
-    console.log("✅ Resolve initialized.");
+    console.log(
+      `✅ Resolve initialized with ${blockedSites.length} blocked websites.`
+    );
   } catch (err) {
     console.error("Resolve initialization failed:", err);
   }
@@ -25,22 +28,26 @@ async function initialize() {
 |--------------------------------------------------------------------------
 */
 
-chrome.runtime.onInstalled.addListener(() => {
-  initialize();
+chrome.runtime.onInstalled.addListener(async () => {
+  await initialize();
 });
 
-chrome.runtime.onStartup.addListener(() => {
-  initialize();
+chrome.runtime.onStartup.addListener(async () => {
+  await initialize();
 });
 
-chrome.storage.onChanged.addListener(() => {
-  initialize();
+chrome.storage.onChanged.addListener(async () => {
+  await initialize();
 });
 
 /*
 |--------------------------------------------------------------------------
-| Website Blocking
+| Website Blocking Logger
 |--------------------------------------------------------------------------
+|
+| The actual blocking is handled by Declarative Net Request.
+| This listener records statistics and sends analytics events.
+|
 */
 
 chrome.webNavigation.onBeforeNavigate.addListener(
@@ -62,12 +69,10 @@ chrome.webNavigation.onBeforeNavigate.addListener(
 
       console.log(`🛡 Blocked: ${hostname}`);
 
-      /*
-      |--------------------------------------------------------------------------
-      | Notify Resolve API
-      |--------------------------------------------------------------------------
-      */
+      // Update recovery statistics
+      await recordBlockedAttempt();
 
+      // Notify Resolve backend
       await emitEvent({
         type: "site_blocked",
         payload: {
@@ -76,17 +81,8 @@ chrome.webNavigation.onBeforeNavigate.addListener(
         },
       });
 
-      /*
-      |--------------------------------------------------------------------------
-      | Redirect user to blocked page
-      |--------------------------------------------------------------------------
-      */
-
-      chrome.tabs.update(details.tabId, {
-        url: chrome.runtime.getURL("blocked.html"),
-      });
     } catch (err) {
-      console.error("Blocking error:", err);
+      console.error("Blocking logger error:", err);
     }
   }
 );

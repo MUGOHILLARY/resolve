@@ -1,40 +1,42 @@
-export async function applyBlockingRules(
-  websites: string[]
-) {
+export async function applyBlockingRules(websites: string[]) {
+  try {
+    const existing =
+      await chrome.declarativeNetRequest.getDynamicRules();
 
-  const existing =
-    await chrome.declarativeNetRequest.getDynamicRules();
+    if (existing.length > 0) {
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: existing.map(rule => rule.id),
+      });
+    }
 
-  await chrome.declarativeNetRequest.updateDynamicRules({
+    const blockedPage = chrome.runtime.getURL("blocked.html");
 
-    removeRuleIds: existing.map(rule => rule.id),
-
-    addRules: websites.map((site, index) => ({
-
+    const rules = websites.map((site, index) => ({
       id: index + 1,
 
       priority: 1,
 
       action: {
-        type: "block",
+        type: chrome.declarativeNetRequest.RuleActionType.REDIRECT,
+        redirect: {
+          url: blockedPage,
+        },
       },
 
       condition: {
-
-        urlFilter: `||${site}`,
-
+        requestDomains: [site],
         resourceTypes: [
-          "main_frame",
+          chrome.declarativeNetRequest.ResourceType.MAIN_FRAME,
         ],
-
       },
+    }));
 
-    })),
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      addRules: rules,
+    });
 
-  });
-
-  console.log(
-    `Resolve loaded ${websites.length} blocking rules`
-  );
-
+    console.log(`✅ Resolve installed ${rules.length} redirect rules.`);
+  } catch (err) {
+    console.error(err);
+  }
 }
