@@ -57,7 +57,12 @@ export type RecoveryProfile = {
 
   motivation: string;
 
-  reminder_time: string;
+  /*
+   * IMPORTANT:
+   * PostgreSQL TIME columns should receive either
+   * a valid time string or NULL.
+   */
+  reminder_time: string | null;
 
   notes: string;
 
@@ -67,17 +72,33 @@ export type RecoveryProfile = {
 
 /*
 |--------------------------------------------------------------------------
-| Auth Header
+| Authentication
 |--------------------------------------------------------------------------
 */
 
-async function getAuthHeaders() {
+async function getAuthHeaders(): Promise<
+  Record<string, string>
+> {
   const {
     data: { session },
+    error,
   } = await supabase.auth.getSession();
 
+  if (error) {
+    console.error(
+      "Failed to get Supabase session:",
+      error
+    );
+
+    throw new Error(
+      "Unable to verify your login session."
+    );
+  }
+
   if (!session?.access_token) {
-    throw new Error("You must be logged in.");
+    throw new Error(
+      "You must be logged in."
+    );
   }
 
   return {
@@ -88,9 +109,47 @@ async function getAuthHeaders() {
 
 /*
 |--------------------------------------------------------------------------
+| Generic API Response Helper
+|--------------------------------------------------------------------------
+*/
+
+async function parseResponse(
+  response: Response
+) {
+  let data: any = null;
+
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data?.message ??
+        `Request failed with status ${response.status}.`
+    );
+  }
+
+  if (data && data.success === false) {
+    throw new Error(
+      data.message ??
+        "Request failed."
+    );
+  }
+
+  return data;
+}
+
+/*
+|--------------------------------------------------------------------------
 | JOURNALS
 |--------------------------------------------------------------------------
 */
+
+/*
+ * Create Journal Entry
+ */
 
 export async function createJournal(
   journal: CreateJournalRequest
@@ -99,21 +158,21 @@ export async function createJournal(
     `${API_BASE_URL}/api/journal`,
     {
       method: "POST",
+
       headers: await getAuthHeaders(),
+
       body: JSON.stringify(journal),
     }
   );
 
-  const data = await response.json();
-
-  if (!response.ok || !data.success) {
-    throw new Error(
-      data.message ?? "Failed to save journal."
-    );
-  }
+  const data = await parseResponse(response);
 
   return data.journal;
 }
+
+/*
+ * Get Journal Entries
+ */
 
 export async function getJournals(): Promise<
   Journal[]
@@ -121,21 +180,20 @@ export async function getJournals(): Promise<
   const response = await fetch(
     `${API_BASE_URL}/api/journal`,
     {
+      method: "GET",
+
       headers: await getAuthHeaders(),
     }
   );
 
-  const data = await response.json();
+  const data = await parseResponse(response);
 
-  if (!response.ok || !data.success) {
-    throw new Error(
-      data.message ??
-        "Failed to load journals."
-    );
-  }
-
-  return data.journals;
+  return data.journals ?? [];
 }
+
+/*
+ * Delete Journal Entry
+ */
 
 export async function deleteJournal(
   id: string
@@ -144,18 +202,12 @@ export async function deleteJournal(
     `${API_BASE_URL}/api/journal/${id}`,
     {
       method: "DELETE",
+
       headers: await getAuthHeaders(),
     }
   );
 
-  const data = await response.json();
-
-  if (!response.ok || !data.success) {
-    throw new Error(
-      data.message ??
-        "Failed to delete journal."
-    );
-  }
+  await parseResponse(response);
 }
 
 /*
@@ -164,6 +216,10 @@ export async function deleteJournal(
 |--------------------------------------------------------------------------
 */
 
+/*
+ * Send Chat Message
+ */
+
 export async function sendChat(
   message: string
 ): Promise<string> {
@@ -171,24 +227,23 @@ export async function sendChat(
     `${API_BASE_URL}/api/chat`,
     {
       method: "POST",
+
       headers: await getAuthHeaders(),
+
       body: JSON.stringify({
         message,
       }),
     }
   );
 
-  const data = await response.json();
-
-  if (!response.ok || !data.success) {
-    throw new Error(
-      data.message ??
-        "Failed to send message."
-    );
-  }
+  const data = await parseResponse(response);
 
   return data.reply;
 }
+
+/*
+ * Load Chat History
+ */
 
 export async function loadHistory(): Promise<
   ChatMessage[]
@@ -196,39 +251,32 @@ export async function loadHistory(): Promise<
   const response = await fetch(
     `${API_BASE_URL}/api/chat/history`,
     {
+      method: "GET",
+
       headers: await getAuthHeaders(),
     }
   );
 
-  const data = await response.json();
+  const data = await parseResponse(response);
 
-  if (!response.ok || !data.success) {
-    throw new Error(
-      data.message ??
-        "Failed to load history."
-    );
-  }
-
-  return data.messages;
+  return data.messages ?? [];
 }
+
+/*
+ * Clear Chat History
+ */
 
 export async function clearHistory(): Promise<void> {
   const response = await fetch(
     `${API_BASE_URL}/api/chat/history`,
     {
       method: "DELETE",
+
       headers: await getAuthHeaders(),
     }
   );
 
-  const data = await response.json();
-
-  if (!response.ok || !data.success) {
-    throw new Error(
-      data.message ??
-        "Failed to clear history."
-    );
-  }
+  await parseResponse(response);
 }
 
 /*
@@ -237,70 +285,111 @@ export async function clearHistory(): Promise<void> {
 |--------------------------------------------------------------------------
 */
 
-export async function getProfile(): Promise<RecoveryProfile | null> {
+/*
+ * Get Recovery Profile
+ */
+
+export async function getProfile(): Promise<
+  RecoveryProfile | null
+> {
   const response = await fetch(
     `${API_BASE_URL}/api/profile`,
     {
+      method: "GET",
+
       headers: await getAuthHeaders(),
     }
   );
 
-  const data = await response.json();
+  const data = await parseResponse(response);
 
-  if (!response.ok || !data.success) {
-    throw new Error(
-      data.message ??
-        "Failed to load profile."
-    );
-  }
-
-  return data.profile;
+  return data.profile ?? null;
 }
 
+/*
+ * Create Recovery Profile
+ */
+
 export async function createProfile(
-  profile: RecoveryProfile
+  profile: Omit<
+    RecoveryProfile,
+    "id" | "user_id" | "created_at" | "updated_at"
+  >
 ): Promise<RecoveryProfile> {
+  /*
+   * Make absolutely sure an empty reminder time
+   * never reaches PostgreSQL as "".
+   */
+
+  const payload = {
+    ...profile,
+
+    reminder_time:
+      profile.reminder_time === "" ||
+      profile.reminder_time == null
+        ? null
+        : profile.reminder_time,
+  };
+
   const response = await fetch(
     `${API_BASE_URL}/api/profile`,
     {
       method: "POST",
+
       headers: await getAuthHeaders(),
-      body: JSON.stringify(profile),
+
+      body: JSON.stringify(payload),
     }
   );
 
-  const data = await response.json();
-
-  if (!response.ok || !data.success) {
-    throw new Error(
-      data.message ??
-        "Failed to create profile."
-    );
-  }
+  const data = await parseResponse(response);
 
   return data.profile;
 }
 
+/*
+ * Update Recovery Profile
+ */
+
 export async function updateProfile(
   profile: Partial<RecoveryProfile>
 ): Promise<RecoveryProfile> {
+  /*
+   * IMPORTANT:
+   *
+   * Convert "" to NULL before sending the request.
+   *
+   * This prevents:
+   *
+   * invalid input syntax for type time: ""
+   */
+
+  const payload = {
+    ...profile,
+
+    ...(profile.reminder_time !== undefined
+      ? {
+          reminder_time:
+            profile.reminder_time === "" ||
+            profile.reminder_time == null
+              ? null
+              : profile.reminder_time,
+        }
+      : {}),
+  };
+
   const response = await fetch(
     `${API_BASE_URL}/api/profile`,
     {
       method: "PUT",
+
       headers: await getAuthHeaders(),
-      body: JSON.stringify(profile),
+
+      body: JSON.stringify(payload),
     }
   );
 
-  const data = await response.json();
-
-  if (!response.ok || !data.success) {
-    throw new Error(
-      data.message ??
-        "Failed to update profile."
-    );
-  }
+  const data = await parseResponse(response);
 
   return data.profile;
 }

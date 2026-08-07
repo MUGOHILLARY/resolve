@@ -8,148 +8,330 @@ import {
 
 import { useProfileStore } from "../store/profileStore";
 
+import {
+  ProfileHeader,
+  GoalsCard,
+  ProgressCard,
+  RiskCard,
+  DailyHabitsCard,
+  SupportCard,
+  NotesCard,
+  SaveProfileButton,
+} from "../components/profile";
+
 export default function RecoveryProfile() {
-  const {
-    profile,
-    setProfile,
-  } = useProfileStore();
+  const { profile, setProfile } = useProfileStore();
+
+  /*
+  |--------------------------------------------------------------------------
+  | Form State
+  |--------------------------------------------------------------------------
+  */
 
   const [goal, setGoal] = useState("");
+  const [motivation, setMotivation] = useState("");
+
   const [challenges, setChallenges] = useState("");
   const [preferences, setPreferences] = useState("");
 
-  const [saving, setSaving] = useState(false);
+  const [currentStreak, setCurrentStreak] = useState(0);
+
+  const [biggestTriggers, setBiggestTriggers] =
+    useState("");
+
+  const [emergencyPlan, setEmergencyPlan] =
+    useState("");
+
+  const [dailyHabits, setDailyHabits] =
+    useState("");
+
+  const [supportPerson, setSupportPerson] =
+    useState("");
+
+  const [reminderTime, setReminderTime] =
+    useState("");
+
+  const [notes, setNotes] = useState("");
+
+  /*
+  |--------------------------------------------------------------------------
+  | Loading / Saving State
+  |--------------------------------------------------------------------------
+  */
+
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  /*
+  |--------------------------------------------------------------------------
+  | Load Existing Recovery Profile
+  |--------------------------------------------------------------------------
+  */
 
   useEffect(() => {
-    loadProfile();
+    loadRecoveryProfile();
   }, []);
 
-  async function loadProfile() {
+  async function loadRecoveryProfile() {
     try {
       const data = await getProfile();
 
-      if (data) {
-        setProfile(data);
+      /*
+      |--------------------------------------------------------------------------
+      | No profile exists yet
+      |--------------------------------------------------------------------------
+      */
 
-        setGoal(data.goal);
-        setChallenges(data.challenges);
-        setPreferences(data.preferences);
+      if (!data) {
+        return;
       }
+
+      /*
+      |--------------------------------------------------------------------------
+      | Store Profile
+      |--------------------------------------------------------------------------
+      */
+
+      setProfile(data);
+
+      /*
+      |--------------------------------------------------------------------------
+      | Populate Form
+      |--------------------------------------------------------------------------
+      */
+
+      setGoal(data.goal ?? "");
+
+      setMotivation(data.motivation ?? "");
+
+      setChallenges(data.challenges ?? "");
+
+      setPreferences(data.preferences ?? "");
+
+      setCurrentStreak(
+        data.current_streak ?? 0
+      );
+
+      setBiggestTriggers(
+        data.biggest_triggers ?? ""
+      );
+
+      setEmergencyPlan(
+        data.emergency_plan ?? ""
+      );
+
+      setDailyHabits(
+        data.daily_habits ?? ""
+      );
+
+      setSupportPerson(
+        data.support_person ?? ""
+      );
+
+      /*
+      |--------------------------------------------------------------------------
+      | IMPORTANT
+      |--------------------------------------------------------------------------
+      |
+      | Database may return NULL for reminder_time.
+      | The input still needs a string, so convert NULL
+      | to an empty string for the UI.
+      |
+      */
+
+      setReminderTime(
+        data.reminder_time ?? ""
+      );
+
+      setNotes(data.notes ?? "");
     } catch (error) {
-      console.error(error);
+      console.error(
+        "Failed to load recovery profile:",
+        error
+      );
     } finally {
       setLoading(false);
     }
   }
 
-  async function saveProfile() {
+  /*
+  |--------------------------------------------------------------------------
+  | Save Recovery Profile
+  |--------------------------------------------------------------------------
+  */
+
+  async function saveRecoveryProfile() {
     try {
       setSaving(true);
 
+      /*
+      |--------------------------------------------------------------------------
+      | IMPORTANT REMINDER_TIME FIX
+      |--------------------------------------------------------------------------
+      |
+      | PostgreSQL TIME columns cannot accept "".
+      |
+      | If the user leaves the reminder time empty,
+      | send NULL instead.
+      |
+      */
+
       const payload = {
         goal,
+        motivation,
         challenges,
         preferences,
+
+        current_streak: currentStreak,
+
+        biggest_triggers: biggestTriggers,
+
+        emergency_plan: emergencyPlan,
+
+        daily_habits: dailyHabits,
+
+        support_person: supportPerson,
+
+        reminder_time:
+          reminderTime.trim() === ""
+            ? null
+            : reminderTime,
+
+        notes,
       };
 
-      let updated;
+      /*
+      |--------------------------------------------------------------------------
+      | Create or Update
+      |--------------------------------------------------------------------------
+      */
 
-      if (profile) {
-        updated = await updateProfile(payload);
-      } else {
-        updated = await createProfile(payload);
-      }
+      const updated = profile
+        ? await updateProfile(payload)
+        : await createProfile(payload);
+
+      /*
+      |--------------------------------------------------------------------------
+      | Update Store
+      |--------------------------------------------------------------------------
+      */
 
       setProfile(updated);
 
-      alert("Recovery profile saved successfully.");
+      /*
+      |--------------------------------------------------------------------------
+      | Success
+      |--------------------------------------------------------------------------
+      */
 
+      alert("Recovery profile saved successfully.");
     } catch (error: any) {
-      alert(error.message);
+      console.error(
+        "Failed to save recovery profile:",
+        error
+      );
+
+      alert(
+        error?.message ??
+          "Failed to save recovery profile."
+      );
     } finally {
       setSaving(false);
     }
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | Loading Screen
+  |--------------------------------------------------------------------------
+  */
+
   if (loading) {
     return (
       <div className="text-white">
-        Loading profile...
+        Loading recovery profile...
       </div>
     );
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | Page
+  |--------------------------------------------------------------------------
+  */
+
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
+    <div className="mx-auto max-w-5xl space-y-8">
 
-      <div>
-        <h1 className="text-3xl font-bold text-white">
-          Recovery Profile
-        </h1>
+      {/* Header */}
 
-        <p className="mt-2 text-slate-400">
-          Help Resolve understand your goals so it can
-          provide personalized coaching.
-        </p>
-      </div>
+      <ProfileHeader />
 
-      <div className="space-y-6 rounded-xl bg-slate-900 p-6">
+      {/* Goals */}
 
-        <div>
-          <label className="mb-2 block text-white">
-            Recovery Goal
-          </label>
+      <GoalsCard
+        goal={goal}
+        motivation={motivation}
+        setGoal={setGoal}
+        setMotivation={setMotivation}
+      />
 
-          <textarea
-            value={goal}
-            onChange={(e) =>
-              setGoal(e.target.value)
-            }
-            className="w-full rounded-lg bg-slate-800 p-3 text-white"
-            rows={3}
-          />
-        </div>
+      {/* Progress */}
 
-        <div>
-          <label className="mb-2 block text-white">
-            Current Challenges
-          </label>
+      <ProgressCard
+        currentStreak={currentStreak}
+        setCurrentStreak={setCurrentStreak}
+      />
 
-          <textarea
-            value={challenges}
-            onChange={(e) =>
-              setChallenges(e.target.value)
-            }
-            className="w-full rounded-lg bg-slate-800 p-3 text-white"
-            rows={4}
-          />
-        </div>
+      {/* Risk Management */}
 
-        <div>
-          <label className="mb-2 block text-white">
-            Preferred Coaching Style
-          </label>
+      <RiskCard
+        biggestTriggers={biggestTriggers}
+        emergencyPlan={emergencyPlan}
+        setBiggestTriggers={
+          setBiggestTriggers
+        }
+        setEmergencyPlan={
+          setEmergencyPlan
+        }
+      />
 
-          <textarea
-            value={preferences}
-            onChange={(e) =>
-              setPreferences(e.target.value)
-            }
-            className="w-full rounded-lg bg-slate-800 p-3 text-white"
-            rows={3}
-          />
-        </div>
+      {/* Daily Habits */}
 
-        <button
-          onClick={saveProfile}
-          disabled={saving}
-          className="rounded-lg bg-blue-600 px-6 py-3 text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {saving ? "Saving..." : "Save Profile"}
-        </button>
+      <DailyHabitsCard
+        dailyHabits={dailyHabits}
+        preferences={preferences}
+        reminderTime={reminderTime}
+        setDailyHabits={setDailyHabits}
+        setPreferences={setPreferences}
+        setReminderTime={setReminderTime}
+      />
 
-      </div>
+      {/* Support */}
+
+      <SupportCard
+        supportPerson={supportPerson}
+        challenges={challenges}
+        setSupportPerson={
+          setSupportPerson
+        }
+        setChallenges={setChallenges}
+      />
+
+      {/* Notes */}
+
+      <NotesCard
+        notes={notes}
+        setNotes={setNotes}
+      />
+
+      {/* Save */}
+
+      <SaveProfileButton
+        saving={saving}
+        onSave={saveRecoveryProfile}
+      />
+
     </div>
   );
 }
