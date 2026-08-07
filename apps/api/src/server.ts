@@ -25,90 +25,88 @@ app.set("trust proxy", 1);
 
 /*
 |--------------------------------------------------------------------------
-| CORS Configuration
+| CORS
 |--------------------------------------------------------------------------
 |
-| Resolve may be accessed from more than one Vercel deployment URL.
+| Supports:
 |
+| - Production Vercel deployment
+| - Git-main Vercel deployment
+| - Local development
+|
+| You can also add additional origins through:
+|
+| FRONTEND_URLS=https://example1.vercel.app,https://example2.vercel.app
+|
+|--------------------------------------------------------------------------
 */
 
 const allowedOrigins = [
+  env.FRONTEND_URL,
+
+  // Current Resolve Vercel deployments
   "https://resolve-web-two.vercel.app",
   "https://resolve-web-git-main-mugohillarys-projects.vercel.app",
-];
+
+  // Local development
+  "http://localhost:5173",
+  "http://localhost:3000",
+
+  // Additional origins supplied through Render environment variables
+  ...(process.env.FRONTEND_URLS
+    ? process.env.FRONTEND_URLS
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean)
+    : []),
+].filter(Boolean);
+
+console.log("🌐 Allowed CORS origins:");
+console.log(allowedOrigins);
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests that do not contain an Origin header
+    // such as server-to-server requests or health checks.
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    console.error("❌ CORS blocked origin:", origin);
+
+    return callback(
+      new Error(`CORS blocked origin: ${origin}`)
+    );
+  },
+
+  credentials: true,
+
+  methods: [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+  ],
+
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+  ],
+};
 
 /*
 |--------------------------------------------------------------------------
-| Add FRONTEND_URL from environment if it exists
-|--------------------------------------------------------------------------
-|
-| This allows Render to control the production frontend URL.
-|
-*/
-
-if (env.FRONTEND_URL) {
-  env.FRONTEND_URL
-    .split(",")
-    .map((url) => url.trim())
-    .filter(Boolean)
-    .forEach((url) => {
-      if (!allowedOrigins.includes(url)) {
-        allowedOrigins.push(url);
-      }
-    });
-}
-
-/*
-|--------------------------------------------------------------------------
-| CORS Middleware
+| Middleware
 |--------------------------------------------------------------------------
 */
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests without an Origin header
-      // such as health checks/server-to-server requests.
-      if (!origin) {
-        return callback(null, true);
-      }
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      console.warn("❌ CORS blocked origin:", origin);
-
-      return callback(
-        new Error(`CORS blocked origin: ${origin}`)
-      );
-    },
-
-    credentials: true,
-
-    methods: [
-      "GET",
-      "POST",
-      "PUT",
-      "PATCH",
-      "DELETE",
-      "OPTIONS",
-    ],
-
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-    ],
-
-    optionsSuccessStatus: 204,
-  })
-);
-
-/*
-|--------------------------------------------------------------------------
-| Security / Compression
-|--------------------------------------------------------------------------
-*/
+app.use(cors(corsOptions));
 
 app.use(helmet());
 
@@ -168,9 +166,9 @@ app.use(
     res: express.Response,
     next: express.NextFunction
   ) => {
-    console.error("❌", err);
+    console.error("❌ API Error:", err);
 
-    // Handle CORS errors
+    // CORS errors
     if (err.message?.startsWith("CORS blocked origin")) {
       return res.status(403).json({
         success: false,
@@ -198,7 +196,7 @@ const server = app.listen(env.PORT, () => {
   console.log("========================================");
   console.log(`🌍 Environment : ${env.NODE_ENV}`);
   console.log(`📡 Port        : ${env.PORT}`);
-  console.log(`🌐 Frontend    : ${allowedOrigins.join(", ")}`);
+  console.log(`🌐 Frontend    : ${env.FRONTEND_URL}`);
   console.log(
     `❤️ Health      : http://localhost:${env.PORT}/`
   );
@@ -222,5 +220,4 @@ function shutdown(signal: string) {
 }
 
 process.on("SIGINT", () => shutdown("SIGINT"));
-
 process.on("SIGTERM", () => shutdown("SIGTERM"));
