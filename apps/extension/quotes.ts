@@ -1,4 +1,4 @@
-const quotes = [
+export const quotes = [
   "One decision today changes tomorrow.",
   "Progress beats perfection.",
   "Your future self will thank you.",

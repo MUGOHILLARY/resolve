@@ -5,7 +5,7 @@ const phases = [
   "Hold",
 ];
 
-export function startBreathing() {
+export function startBreathingAnimation() {
   const text = document.getElementById("breathingText");
 
   if (!text) return;
@@ -18,4 +18,9 @@ export function startBreathing() {
     index = (index + 1) % phases.length;
     text.textContent = phases[index];
   }, 4000);
+}
+
+// Keep the older function name available as well.
+export function startBreathing() {
+  startBreathingAnimation();
 }

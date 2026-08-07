@@ -25,16 +25,90 @@ app.set("trust proxy", 1);
 
 /*
 |--------------------------------------------------------------------------
-| Middleware
+| CORS Configuration
+|--------------------------------------------------------------------------
+|
+| Resolve may be accessed from more than one Vercel deployment URL.
+|
+*/
+
+const allowedOrigins = [
+  "https://resolve-web-two.vercel.app",
+  "https://resolve-web-git-main-mugohillarys-projects.vercel.app",
+];
+
+/*
+|--------------------------------------------------------------------------
+| Add FRONTEND_URL from environment if it exists
+|--------------------------------------------------------------------------
+|
+| This allows Render to control the production frontend URL.
+|
+*/
+
+if (env.FRONTEND_URL) {
+  env.FRONTEND_URL
+    .split(",")
+    .map((url) => url.trim())
+    .filter(Boolean)
+    .forEach((url) => {
+      if (!allowedOrigins.includes(url)) {
+        allowedOrigins.push(url);
+      }
+    });
+}
+
+/*
+|--------------------------------------------------------------------------
+| CORS Middleware
 |--------------------------------------------------------------------------
 */
 
 app.use(
   cors({
-    origin: env.FRONTEND_URL,
+    origin: (origin, callback) => {
+      // Allow requests without an Origin header
+      // such as health checks/server-to-server requests.
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.warn("❌ CORS blocked origin:", origin);
+
+      return callback(
+        new Error(`CORS blocked origin: ${origin}`)
+      );
+    },
+
     credentials: true,
+
+    methods: [
+      "GET",
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE",
+      "OPTIONS",
+    ],
+
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+    ],
+
+    optionsSuccessStatus: 204,
   })
 );
+
+/*
+|--------------------------------------------------------------------------
+| Security / Compression
+|--------------------------------------------------------------------------
+*/
 
 app.use(helmet());
 
@@ -96,9 +170,18 @@ app.use(
   ) => {
     console.error("❌", err);
 
+    // Handle CORS errors
+    if (err.message?.startsWith("CORS blocked origin")) {
+      return res.status(403).json({
+        success: false,
+        message: err.message,
+      });
+    }
+
     res.status(err.status || 500).json({
       success: false,
-      message: err.message || "Internal server error.",
+      message:
+        err.message || "Internal server error.",
     });
   }
 );
@@ -115,8 +198,10 @@ const server = app.listen(env.PORT, () => {
   console.log("========================================");
   console.log(`🌍 Environment : ${env.NODE_ENV}`);
   console.log(`📡 Port        : ${env.PORT}`);
-  console.log(`🌐 Frontend    : ${env.FRONTEND_URL}`);
-  console.log(`❤️ Health      : http://localhost:${env.PORT}/`);
+  console.log(`🌐 Frontend    : ${allowedOrigins.join(", ")}`);
+  console.log(
+    `❤️ Health      : http://localhost:${env.PORT}/`
+  );
   console.log("========================================");
 });
 
@@ -137,4 +222,5 @@ function shutdown(signal: string) {
 }
 
 process.on("SIGINT", () => shutdown("SIGINT"));
+
 process.on("SIGTERM", () => shutdown("SIGTERM"));
