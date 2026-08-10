@@ -34,9 +34,6 @@ export async function requireAuth(
       });
     }
 
-    /*
-     * Extract the Supabase access token.
-     */
     const token = authHeader
       .slice(7)
       .trim();
@@ -49,11 +46,6 @@ export async function requireAuth(
       });
     }
 
-    /*
-     * Ask Supabase to validate the token.
-     *
-     * Do NOT manually decode the JWT.
-     */
     const {
       data: { user },
       error,
@@ -61,7 +53,7 @@ export async function requireAuth(
 
     if (error) {
       console.error(
-        "❌ Supabase authentication failed:",
+        "❌ Supabase rejected access token:",
         {
           message: error.message,
           status: error.status,
@@ -88,10 +80,6 @@ export async function requireAuth(
       });
     }
 
-    /*
-     * Store the authenticated Supabase
-     * user's UUID on the Express request.
-     */
     req.userId = user.id;
 
     console.log(
