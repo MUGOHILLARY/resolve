@@ -1,14 +1,50 @@
-import { Request, Response } from "express";
-
+import type { Request, Response } from "express";
 import {
-  getRecoveryProfile,
-  createRecoveryProfile,
-  updateRecoveryProfile,
+  createProfile as createProfileService,
+  getProfile as getProfileService,
+  updateProfile as updateProfileService,
 } from "../services/profileService.js";
 
 /*
 |--------------------------------------------------------------------------
-| Get Recovery Profile
+| Normalize reminder time
+|--------------------------------------------------------------------------
+|
+| PostgreSQL TIME accepts:
+|
+|   "08:30"
+|   "18:45"
+|   null
+|
+| It does NOT accept:
+|
+|   ""
+|
+*/
+
+function normalizeReminderTime(
+  value: unknown
+): string | null {
+  if (
+    value === undefined ||
+    value === null ||
+    value === ""
+  ) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  return trimmed === "" ? null : trimmed;
+}
+
+/*
+|--------------------------------------------------------------------------
+| GET PROFILE
 |--------------------------------------------------------------------------
 */
 
@@ -17,29 +53,40 @@ export async function getProfile(
   res: Response
 ) {
   try {
-    const userId = req.userId!;
+    const userId = req.userId;
 
-    const profile = await getRecoveryProfile(userId);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized.",
+      });
+    }
+
+    const profile =
+      await getProfileService(userId);
 
     return res.json({
       success: true,
       profile,
     });
   } catch (error: any) {
-    console.error("Profile error:", error);
+    console.error(
+      "❌ Get profile error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
       message:
-        error.message ||
-        "Failed to load recovery profile.",
+        error?.message ??
+        "Failed to load profile.",
     });
   }
 }
 
 /*
 |--------------------------------------------------------------------------
-| Create Recovery Profile
+| CREATE PROFILE
 |--------------------------------------------------------------------------
 */
 
@@ -48,85 +95,105 @@ export async function createProfile(
   res: Response
 ) {
   try {
-    const userId = req.userId!;
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized.",
+      });
+    }
 
     const {
       goal,
+      motivation,
       challenges,
       preferences,
-
       current_streak,
-
       biggest_triggers,
-
       emergency_plan,
-
       daily_habits,
-
       support_person,
-
-      motivation,
-
       reminder_time,
-
       notes,
     } = req.body;
 
-    const profile =
-      await createRecoveryProfile({
-        user_id: userId,
+    const profile = {
+      user_id: userId,
 
-        goal,
-        challenges,
-        preferences,
+      goal: goal ?? "",
 
-        current_streak:
-          current_streak ?? 0,
+      motivation: motivation ?? "",
 
-        biggest_triggers:
-          biggest_triggers ?? "",
+      challenges: challenges ?? "",
 
-        emergency_plan:
-          emergency_plan ?? "",
+      preferences: preferences ?? "",
 
-        daily_habits:
-          daily_habits ?? "",
+      current_streak:
+        current_streak ?? 0,
 
-        support_person:
-          support_person ?? "",
+      biggest_triggers:
+        biggest_triggers ?? "",
 
-        motivation:
-          motivation ?? "",
+      emergency_plan:
+        emergency_plan ?? "",
 
+      daily_habits:
+        daily_habits ?? "",
+
+      support_person:
+        support_person ?? "",
+
+      /*
+      |--------------------------------------------------------------------------
+      | IMPORTANT
+      |--------------------------------------------------------------------------
+      */
+
+      reminder_time:
+        normalizeReminderTime(
+          reminder_time
+        ),
+
+      notes: notes ?? "",
+    };
+
+    console.log(
+      "Creating recovery profile:",
+      {
+        ...profile,
         reminder_time:
-          reminder_time ?? "",
+          profile.reminder_time,
+      }
+    );
 
-        notes:
-          notes ?? "",
-      });
+    const created =
+      await createProfileService(
+        profile
+      );
 
     return res.status(201).json({
       success: true,
-      profile,
+      profile: created,
     });
   } catch (error: any) {
     console.error(
-      "Create profile error:",
+      "❌ Create profile error:",
       error
     );
 
     return res.status(500).json({
       success: false,
       message:
-        error.message ||
-        "Failed to create recovery profile.",
+        error?.message ??
+        "Failed to create profile.",
     });
   }
 }
 
 /*
 |--------------------------------------------------------------------------
-| Update Recovery Profile
+| UPDATE PROFILE
 |--------------------------------------------------------------------------
 */
 
@@ -135,71 +202,73 @@ export async function updateProfile(
   res: Response
 ) {
   try {
-    const userId = req.userId!;
+    const userId = req.userId;
 
-    const {
-      goal,
-      challenges,
-      preferences,
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized.",
+      });
+    }
 
-      current_streak,
+    const updates = {
+      ...req.body,
+    };
 
-      biggest_triggers,
+    /*
+    |--------------------------------------------------------------------------
+    | IMPORTANT REMINDER TIME FIX
+    |--------------------------------------------------------------------------
+    */
 
-      emergency_plan,
+    if (
+      Object.prototype.hasOwnProperty.call(
+        updates,
+        "reminder_time"
+      )
+    ) {
+      updates.reminder_time =
+        normalizeReminderTime(
+          updates.reminder_time
+        );
+    }
 
-      daily_habits,
+    /*
+    |--------------------------------------------------------------------------
+    | Never allow an empty string to reach PostgreSQL
+    |--------------------------------------------------------------------------
+    */
 
-      support_person,
+    console.log(
+      "Updating recovery profile:",
+      {
+        ...updates,
+        reminder_time:
+          updates.reminder_time,
+      }
+    );
 
-      motivation,
-
-      reminder_time,
-
-      notes,
-    } = req.body;
-
-    const profile =
-      await updateRecoveryProfile(
+    const updated =
+      await updateProfileService(
         userId,
-        {
-          goal,
-          challenges,
-          preferences,
-
-          current_streak,
-
-          biggest_triggers,
-
-          emergency_plan,
-
-          daily_habits,
-
-          support_person,
-
-          motivation,
-
-          reminder_time,
-
-          notes,
-        }
+        updates
       );
 
     return res.json({
       success: true,
-      profile,
+      profile: updated,
     });
   } catch (error: any) {
     console.error(
-      "Update profile error:",
+      "❌ Update profile error:",
       error
     );
 
     return res.status(500).json({
       success: false,
       message:
-        error.message ||
-        "Failed to update recovery profile.",
+        error?.message ??
+        "Failed to update profile.",
     });
   }
 }

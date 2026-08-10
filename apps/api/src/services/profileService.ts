@@ -1,42 +1,49 @@
 import { supabase } from "../lib/supabase.js";
 
-export interface RecoveryProfile {
-  id?: string;
-  user_id: string;
+/*
+|--------------------------------------------------------------------------
+| Normalize Reminder Time
+|--------------------------------------------------------------------------
+|
+| PostgreSQL TIME accepts:
+|   "08:30"
+|   "18:45"
+|   null
+|
+| PostgreSQL TIME does NOT accept:
+|   ""
+|
+*/
 
-  goal: string;
-  challenges: string;
-  preferences: string;
+function normalizeReminderTime(
+  value: unknown
+): string | null {
+  if (
+    value === undefined ||
+    value === null ||
+    value === ""
+  ) {
+    return null;
+  }
 
-  current_streak: number;
+  if (typeof value !== "string") {
+    return null;
+  }
 
-  biggest_triggers: string;
+  const trimmed = value.trim();
 
-  emergency_plan: string;
-
-  daily_habits: string;
-
-  support_person: string;
-
-  motivation: string;
-
-  reminder_time: string;
-
-  notes: string;
-
-  created_at?: string;
-  updated_at?: string;
+  return trimmed === "" ? null : trimmed;
 }
 
 /*
 |--------------------------------------------------------------------------
-| Get Recovery Profile
+| GET RECOVERY PROFILE
 |--------------------------------------------------------------------------
 */
 
-export async function getRecoveryProfile(
+export async function getProfile(
   userId: string
-): Promise<RecoveryProfile | null> {
+) {
   const { data, error } = await supabase
     .from("recovery_profiles")
     .select("*")
@@ -44,6 +51,11 @@ export async function getRecoveryProfile(
     .maybeSingle();
 
   if (error) {
+    console.error(
+      "❌ Failed to get recovery profile:",
+      error
+    );
+
     throw error;
   }
 
@@ -52,20 +64,43 @@ export async function getRecoveryProfile(
 
 /*
 |--------------------------------------------------------------------------
-| Create Recovery Profile
+| CREATE RECOVERY PROFILE
 |--------------------------------------------------------------------------
 */
 
-export async function createRecoveryProfile(
-  profile: RecoveryProfile
-): Promise<RecoveryProfile> {
+export async function createProfile(
+  profile: any
+) {
+  const payload = {
+    ...profile,
+
+    reminder_time:
+      normalizeReminderTime(
+        profile.reminder_time
+      ),
+  };
+
+  console.log(
+    "📝 Creating recovery profile:",
+    {
+      user_id: payload.user_id,
+      reminder_time:
+        payload.reminder_time,
+    }
+  );
+
   const { data, error } = await supabase
     .from("recovery_profiles")
-    .insert(profile)
+    .insert(payload)
     .select()
     .single();
 
   if (error) {
+    console.error(
+      "❌ Failed to create recovery profile:",
+      error
+    );
+
     throw error;
   }
 
@@ -74,51 +109,69 @@ export async function createRecoveryProfile(
 
 /*
 |--------------------------------------------------------------------------
-| Update Recovery Profile
+| UPDATE RECOVERY PROFILE
 |--------------------------------------------------------------------------
 */
 
-export async function updateRecoveryProfile(
+export async function updateProfile(
   userId: string,
-  updates: Partial<
-    Omit<
-      RecoveryProfile,
-      "id" | "user_id" | "created_at"
-    >
-  >
-): Promise<RecoveryProfile> {
+  updates: Record<string, any>
+) {
+  const payload = {
+    ...updates,
+  };
+
+  /*
+  |--------------------------------------------------------------------------
+  | Only normalize reminder_time when it was supplied
+  |--------------------------------------------------------------------------
+  */
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      payload,
+      "reminder_time"
+    )
+  ) {
+    payload.reminder_time =
+      normalizeReminderTime(
+        payload.reminder_time
+      );
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | Update timestamp
+  |--------------------------------------------------------------------------
+  */
+
+  payload.updated_at =
+    new Date().toISOString();
+
+  console.log(
+    "📝 Updating recovery profile:",
+    {
+      user_id: userId,
+      reminder_time:
+        payload.reminder_time,
+    }
+  );
+
   const { data, error } = await supabase
     .from("recovery_profiles")
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString(),
-    })
+    .update(payload)
     .eq("user_id", userId)
     .select()
     .single();
 
   if (error) {
+    console.error(
+      "❌ Failed to update recovery profile:",
+      error
+    );
+
     throw error;
   }
 
   return data;
-}
-
-/*
-|--------------------------------------------------------------------------
-| Delete Recovery Profile (Optional)
-|--------------------------------------------------------------------------
-*/
-
-export async function deleteRecoveryProfile(
-  userId: string
-): Promise<void> {
-  const { error } = await supabase
-    .from("recovery_profiles")
-    .delete()
-    .eq("user_id", userId);
-
-  if (error) {
-    throw error;
-  }
 }
