@@ -12,6 +12,7 @@ import chatRoutes from "./routes/chatRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
 import blockerRoutes from "./routes/blockerRoutes.js";
 import eventRoutes from "./routes/eventRoutes.js";
+import subscriptionRoutes from "./routes/subscriptionRoutes.js";
 
 const app = express();
 
@@ -33,10 +34,7 @@ app.set("trust proxy", 1);
 | - Production Vercel deployment
 | - Git-main Vercel deployment
 | - Local development
-|
-| You can also add additional origins through:
-|
-| FRONTEND_URLS=https://example1.vercel.app,https://example2.vercel.app
+| - Additional origins through FRONTEND_URLS
 |
 |--------------------------------------------------------------------------
 */
@@ -52,7 +50,7 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
 
-  // Additional origins supplied through Render environment variables
+  // Additional origins supplied through Render
   ...(process.env.FRONTEND_URLS
     ? process.env.FRONTEND_URLS
         .split(",")
@@ -66,7 +64,7 @@ console.log(allowedOrigins);
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    // Allow requests that do not contain an Origin header
+    // Allow requests without an Origin header,
     // such as server-to-server requests or health checks.
     if (!origin) {
       return callback(null, true);
@@ -140,6 +138,12 @@ app.use("/api/blocker", blockerRoutes);
 // Resolve Events API
 app.use("/api/events", eventRoutes);
 
+// Resolve Premium Subscription API
+app.use(
+  "/api/subscription",
+  subscriptionRoutes
+);
+
 /*
 |--------------------------------------------------------------------------
 | 404 Handler
@@ -169,7 +173,11 @@ app.use(
     console.error("❌ API Error:", err);
 
     // CORS errors
-    if (err.message?.startsWith("CORS blocked origin")) {
+    if (
+      err.message?.startsWith(
+        "CORS blocked origin"
+      )
+    ) {
       return res.status(403).json({
         success: false,
         message: err.message,
@@ -179,7 +187,8 @@ app.use(
     res.status(err.status || 500).json({
       success: false,
       message:
-        err.message || "Internal server error.",
+        err.message ||
+        "Internal server error.",
     });
   }
 );
@@ -190,18 +199,46 @@ app.use(
 |--------------------------------------------------------------------------
 */
 
-const server = app.listen(env.PORT, () => {
-  console.log("========================================");
-  console.log("🛡️  Resolve API Started Successfully");
-  console.log("========================================");
-  console.log(`🌍 Environment : ${env.NODE_ENV}`);
-  console.log(`📡 Port        : ${env.PORT}`);
-  console.log(`🌐 Frontend    : ${env.FRONTEND_URL}`);
-  console.log(
-    `❤️ Health      : http://localhost:${env.PORT}/`
-  );
-  console.log("========================================");
-});
+const server = app.listen(
+  env.PORT,
+  () => {
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "🛡️  Resolve API Started Successfully"
+    );
+
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      `🌍 Environment : ${env.NODE_ENV}`
+    );
+
+    console.log(
+      `📡 Port        : ${env.PORT}`
+    );
+
+    console.log(
+      `🌐 Frontend    : ${env.FRONTEND_URL}`
+    );
+
+    console.log(
+      `❤️ Health      : http://localhost:${env.PORT}/`
+    );
+
+    console.log(
+      "💎 Premium     : /api/subscription"
+    );
+
+    console.log(
+      "========================================"
+    );
+  }
+);
 
 /*
 |--------------------------------------------------------------------------
@@ -211,13 +248,24 @@ const server = app.listen(env.PORT, () => {
 
 function shutdown(signal: string) {
   console.log(`\n⚠️ Received ${signal}`);
-  console.log("Closing Resolve API...");
+
+  console.log(
+    "Closing Resolve API..."
+  );
 
   server.close(() => {
-    console.log("✅ HTTP server closed.");
+    console.log(
+      "✅ HTTP server closed."
+    );
+
     process.exit(0);
   });
 }
 
-process.on("SIGINT", () => shutdown("SIGINT"));
-process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () =>
+  shutdown("SIGINT")
+);
+
+process.on("SIGTERM", () =>
+  shutdown("SIGTERM")
+);
