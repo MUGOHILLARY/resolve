@@ -1,18 +1,10 @@
+import { randomUUID } from "crypto";
 import { supabase } from "../lib/supabase.js";
 
 /*
 |--------------------------------------------------------------------------
 | Normalize Reminder Time
 |--------------------------------------------------------------------------
-|
-| PostgreSQL TIME accepts:
-|   "08:30"
-|   "18:45"
-|   null
-|
-| PostgreSQL TIME does NOT accept:
-|   ""
-|
 */
 
 function normalizeReminderTime(
@@ -71,8 +63,22 @@ export async function getProfile(
 export async function createProfile(
   profile: any
 ) {
+  /*
+  |--------------------------------------------------------------------------
+  | Generate ID if one was not supplied
+  |--------------------------------------------------------------------------
+  |
+  | The database currently requires recovery_profiles.id
+  | to be NOT NULL.
+  |
+  */
+
   const payload = {
     ...profile,
+
+    id:
+      profile.id ??
+      randomUUID(),
 
     reminder_time:
       normalizeReminderTime(
@@ -83,6 +89,7 @@ export async function createProfile(
   console.log(
     "📝 Creating recovery profile:",
     {
+      id: payload.id,
       user_id: payload.user_id,
       reminder_time:
         payload.reminder_time,
@@ -123,7 +130,16 @@ export async function updateProfile(
 
   /*
   |--------------------------------------------------------------------------
-  | Only normalize reminder_time when it was supplied
+  | Never update the primary key
+  |--------------------------------------------------------------------------
+  */
+
+  delete payload.id;
+  delete payload.user_id;
+
+  /*
+  |--------------------------------------------------------------------------
+  | Normalize reminder_time
   |--------------------------------------------------------------------------
   */
 
