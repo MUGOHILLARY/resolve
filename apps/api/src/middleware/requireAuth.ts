@@ -1,4 +1,8 @@
-import type { NextFunction, Request, Response } from "express";
+import type {
+  NextFunction,
+  Request,
+  Response,
+} from "express";
 
 import { supabase } from "../lib/supabase.js";
 
@@ -16,36 +20,96 @@ export async function requireAuth(
   next: NextFunction
 ) {
   try {
-    const authHeader = req.headers.authorization;
+    const authHeader =
+      req.headers.authorization;
 
-    if (!authHeader?.startsWith("Bearer ")) {
+    if (
+      !authHeader ||
+      !authHeader.startsWith("Bearer ")
+    ) {
       return res.status(401).json({
         success: false,
-        message: "Missing authorization token.",
+        message:
+          "Missing authorization token.",
       });
     }
 
-    const token = authHeader.replace("Bearer ", "");
+    /*
+     * Extract the Supabase access token.
+     */
+    const token = authHeader
+      .slice(7)
+      .trim();
 
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Missing authorization token.",
+      });
+    }
+
+    /*
+     * Ask Supabase to validate the token.
+     *
+     * Do NOT manually decode the JWT.
+     */
     const {
       data: { user },
       error,
     } = await supabase.auth.getUser(token);
 
-    if (error || !user) {
+    if (error) {
+      console.error(
+        "❌ Supabase authentication failed:",
+        {
+          message: error.message,
+          status: error.status,
+          name: error.name,
+        }
+      );
+
       return res.status(401).json({
         success: false,
-        message: "Invalid authentication token.",
+        message:
+          "Invalid authentication token.",
       });
     }
 
+    if (!user) {
+      console.error(
+        "❌ Supabase returned no user."
+      );
+
+      return res.status(401).json({
+        success: false,
+        message:
+          "Invalid authentication token.",
+      });
+    }
+
+    /*
+     * Store the authenticated Supabase
+     * user's UUID on the Express request.
+     */
     req.userId = user.id;
 
-    next();
+    console.log(
+      "✅ Authenticated user:",
+      user.id
+    );
+
+    return next();
   } catch (error: any) {
+    console.error(
+      "❌ Authentication middleware error:",
+      error
+    );
+
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message:
+        "Authentication service error.",
     });
   }
 }

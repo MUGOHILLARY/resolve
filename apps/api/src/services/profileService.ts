@@ -1,12 +1,16 @@
-import { randomUUID } from "crypto";
 import { supabase } from "../lib/supabase.js";
 
-/*
-|--------------------------------------------------------------------------
-| Normalize Reminder Time
-|--------------------------------------------------------------------------
-*/
-
+/**
+ * Normalize reminder time.
+ *
+ * PostgreSQL TIME accepts:
+ *   "08:30"
+ *   "18:45"
+ *   null
+ *
+ * PostgreSQL TIME does NOT accept:
+ *   ""
+ */
 function normalizeReminderTime(
   value: unknown
 ): string | null {
@@ -24,15 +28,26 @@ function normalizeReminderTime(
 
   const trimmed = value.trim();
 
-  return trimmed === "" ? null : trimmed;
+  if (trimmed === "") {
+    return null;
+  }
+
+  /*
+   * HTML <input type="time"> normally gives HH:MM.
+   * PostgreSQL TIME accepts this format.
+   */
+  if (!/^\d{2}:\d{2}$/.test(trimmed)) {
+    throw new Error(
+      "Reminder time must be in HH:MM format."
+    );
+  }
+
+  return trimmed;
 }
 
-/*
-|--------------------------------------------------------------------------
-| GET RECOVERY PROFILE
-|--------------------------------------------------------------------------
-*/
-
+/**
+ * GET RECOVERY PROFILE
+ */
 export async function getProfile(
   userId: string
 ) {
@@ -54,37 +69,62 @@ export async function getProfile(
   return data;
 }
 
-/*
-|--------------------------------------------------------------------------
-| CREATE RECOVERY PROFILE
-|--------------------------------------------------------------------------
-*/
-
+/**
+ * CREATE RECOVERY PROFILE
+ */
 export async function createProfile(
-  profile: any
+  profile: Record<string, any>
 ) {
   /*
-  |--------------------------------------------------------------------------
-  | Generate ID if one was not supplied
-  |--------------------------------------------------------------------------
-  |
-  | The database currently requires recovery_profiles.id
-  | to be NOT NULL.
-  |
-  */
+   * IMPORTANT:
+   *
+   * Your recovery_profiles.id column is NOT allowing NULL.
+   * Generate the UUID here instead of relying on the database.
+   */
+  const id =
+    typeof profile.id === "string" &&
+    profile.id.trim() !== ""
+      ? profile.id
+      : crypto.randomUUID();
 
-  const payload = {
+  /*
+   * user_id must come from the authenticated user.
+   */
+  if (
+    !profile.user_id ||
+    typeof profile.user_id !== "string"
+  ) {
+    throw new Error(
+      "Authenticated user ID is required to create a recovery profile."
+    );
+  }
+
+  const payload: Record<string, any> = {
     ...profile,
 
-    id:
-      profile.id ??
-      randomUUID(),
+    id,
+
+    user_id: profile.user_id,
 
     reminder_time:
       normalizeReminderTime(
         profile.reminder_time
       ),
+
+    updated_at:
+      profile.updated_at ??
+      new Date().toISOString(),
   };
+
+  /*
+   * Do not allow the client to accidentally send
+   * undefined as the ID.
+   */
+  if (!payload.id) {
+    throw new Error(
+      "Recovery profile ID could not be generated."
+    );
+  }
 
   console.log(
     "📝 Creating recovery profile:",
@@ -99,7 +139,7 @@ export async function createProfile(
   const { data, error } = await supabase
     .from("recovery_profiles")
     .insert(payload)
-    .select()
+    .select("*")
     .single();
 
   if (error) {
@@ -114,35 +154,37 @@ export async function createProfile(
   return data;
 }
 
-/*
-|--------------------------------------------------------------------------
-| UPDATE RECOVERY PROFILE
-|--------------------------------------------------------------------------
-*/
-
+/**
+ * UPDATE RECOVERY PROFILE
+ */
 export async function updateProfile(
   userId: string,
   updates: Record<string, any>
 ) {
-  const payload = {
-    ...updates,
-  };
+  if (
+    !userId ||
+    typeof userId !== "string"
+  ) {
+    throw new Error(
+      "Authenticated user ID is required."
+    );
+  }
 
   /*
-  |--------------------------------------------------------------------------
-  | Never update the primary key
-  |--------------------------------------------------------------------------
-  */
+   * Never allow the client to change the profile ID
+   * or user ownership during an update.
+   */
+  const payload: Record<string, any> = {
+    ...updates,
+  };
 
   delete payload.id;
   delete payload.user_id;
 
   /*
-  |--------------------------------------------------------------------------
-  | Normalize reminder_time
-  |--------------------------------------------------------------------------
-  */
-
+   * Only normalize reminder_time when it
+   * was actually supplied.
+   */
   if (
     Object.prototype.hasOwnProperty.call(
       payload,
@@ -156,11 +198,8 @@ export async function updateProfile(
   }
 
   /*
-  |--------------------------------------------------------------------------
-  | Update timestamp
-  |--------------------------------------------------------------------------
-  */
-
+   * Always update the modification timestamp.
+   */
   payload.updated_at =
     new Date().toISOString();
 
@@ -177,7 +216,7 @@ export async function updateProfile(
     .from("recovery_profiles")
     .update(payload)
     .eq("user_id", userId)
-    .select()
+    .select("*")
     .single();
 
   if (error) {

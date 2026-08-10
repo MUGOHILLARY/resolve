@@ -3,16 +3,34 @@ import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceRoleKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-console.log("Supabase URL:", supabaseUrl);
+if (!supabaseUrl) {
+  throw new Error(
+    "SUPABASE_URL is not configured."
+  );
+}
+
+if (!supabaseServiceRoleKey) {
+  throw new Error(
+    "SUPABASE_SERVICE_ROLE_KEY is not configured."
+  );
+}
+
 console.log(
-  "Service Role Key starts with:",
-  supabaseServiceRoleKey.substring(0, 20)
+  "Supabase URL:",
+  supabaseUrl
 );
 
 export const supabase = createClient(
   supabaseUrl,
-  supabaseServiceRoleKey
+  supabaseServiceRoleKey,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
 );
