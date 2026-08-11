@@ -1,29 +1,188 @@
-import { supabase } from "../lib/supabase";
-import { saveSettings } from "../storage/settings";
+const API_BASE_URL = "http://localhost:4000";
 
-export async function syncSettingsFromSupabase() {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+const SESSION_STORAGE_KEY = "resolveSession";
 
-  if (!user) return;
+export interface ResolveUser {
+  id?: string;
+  email?: string;
+}
 
-  const { data, error } = await supabase
-    .from("blocker_settings")
-    .select("*")
-    .eq("user_id", user.id)
-    .single();
+export interface ResolveSession {
+  access_token: string;
+  refresh_token?: string;
+  expires_at?: number;
+  user?: ResolveUser;
+}
 
-  if (error) {
-    console.error(error);
-    return;
-  }
+export interface BlockerSettings {
+  gambling: boolean;
+  adult: boolean;
+  social: boolean;
+  gaming: boolean;
+  customSites: string[];
+}
 
-  await saveSettings({
-    gambling: data.gambling,
-    adult: data.adult_content,
-    social: data.social_media,
-    gaming: data.gaming,
-    customSites: data.custom_sites,
+/**
+ * Save the logged-in Resolve/Supabase session
+ * inside extension storage.
+ */
+export async function saveResolveSession(
+  session: ResolveSession
+): Promise<void> {
+  await chrome.storage.local.set({
+    [SESSION_STORAGE_KEY]: session,
   });
+
+  console.log("✅ Resolve session saved.");
+}
+
+/**
+ * Retrieve the currently connected Resolve session.
+ */
+export async function getResolveSession(): Promise<
+  ResolveSession | null
+> {
+  const result = await chrome.storage.local.get(
+    SESSION_STORAGE_KEY
+  );
+
+  const session = result[
+    SESSION_STORAGE_KEY
+  ] as ResolveSession | undefined;
+
+  return session ?? null;
+}
+
+/**
+ * Remove the connected Resolve account.
+ */
+export async function clearResolveSession(): Promise<void> {
+  await chrome.storage.local.remove(
+    SESSION_STORAGE_KEY
+  );
+
+  console.log("🔓 Resolve session cleared.");
+}
+
+/**
+ * Fetch the logged-in user's blocker settings
+ * from the Resolve API.
+ */
+export async function syncSettingsFromResolve(): Promise<
+  BlockerSettings | null
+> {
+  try {
+    const session = await getResolveSession();
+
+    if (!session?.access_token) {
+      console.warn(
+        "⚠️ No Resolve session found. Cannot sync settings."
+      );
+
+      return null;
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/blocker`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error(
+        `❌ Resolve blocker API returned ${response.status}`
+      );
+
+      if (
+        response.status === 401 ||
+        response.status === 403
+      ) {
+        console.warn(
+          "🔒 Resolve session is no longer valid."
+        );
+      }
+
+      return null;
+    }
+
+    const result = await response.json();
+
+    /*
+     * Supports both:
+     *
+     * {
+     *   success: true,
+     *   settings: {...}
+     * }
+     *
+     * and:
+     *
+     * {
+     *   success: true,
+     *   data: {...}
+     * }
+     */
+
+    const settings =
+      result?.settings ??
+      result?.data ??
+      result;
+
+    if (!settings) {
+      console.warn(
+        "⚠️ Resolve returned no blocker settings."
+      );
+
+      return null;
+    }
+
+    const normalizedSettings: BlockerSettings = {
+      gambling: Boolean(
+        settings.gambling
+      ),
+
+      adult: Boolean(
+        settings.adult ??
+        settings.adult_content
+      ),
+
+      social: Boolean(
+        settings.social ??
+        settings.social_media
+      ),
+
+      gaming: Boolean(
+        settings.gaming
+      ),
+
+      customSites: Array.isArray(
+        settings.customSites
+      )
+        ? settings.customSites
+        : Array.isArray(
+            settings.custom_sites
+          )
+        ? settings.custom_sites
+        : [],
+    };
+
+    console.log(
+      "✅ Resolve blocker settings synced:",
+      normalizedSettings
+    );
+
+    return normalizedSettings;
+  } catch (error) {
+    console.error(
+      "❌ Failed to sync Resolve settings:",
+      error
+    );
+
+    return null;
+  }
 }

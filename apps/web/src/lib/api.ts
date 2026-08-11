@@ -1,13 +1,12 @@
 import { supabase } from "./supabase";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL ?? "http://localhost:4000";
+  import.meta.env.VITE_API_URL ??
+  "http://localhost:4000";
 
-/*
-|--------------------------------------------------------------------------
-| Types
-|--------------------------------------------------------------------------
-*/
+/* ==========================================================================
+   Types
+   ========================================================================== */
 
 export type CreateJournalRequest = {
   mood: string;
@@ -58,9 +57,8 @@ export type RecoveryProfile = {
   motivation: string;
 
   /*
-   * IMPORTANT:
-   * PostgreSQL TIME columns should receive either
-   * a valid time string or NULL.
+   * PostgreSQL TIME accepts a valid time string or NULL.
+   * It does not accept "".
    */
   reminder_time: string | null;
 
@@ -70,11 +68,50 @@ export type RecoveryProfile = {
   updated_at?: string;
 };
 
-/*
-|--------------------------------------------------------------------------
-| Authentication
-|--------------------------------------------------------------------------
-*/
+/* ==========================================================================
+   PREMIUM SUBSCRIPTION
+   ========================================================================== */
+
+export type SubscriptionPlan =
+  | "free"
+  | "premium";
+
+export type SubscriptionStatus =
+  | "active"
+  | "trialing"
+  | "past_due"
+  | "cancelled"
+  | "expired";
+
+export type Subscription = {
+  id: string;
+
+  user_id: string;
+
+  provider: string;
+
+  provider_customer_id: string | null;
+
+  provider_subscription_id: string | null;
+
+  plan: SubscriptionPlan;
+
+  status: SubscriptionStatus;
+
+  current_period_start: string | null;
+
+  current_period_end: string | null;
+
+  cancel_at_period_end: boolean;
+
+  created_at: string;
+
+  updated_at: string;
+};
+
+/* ==========================================================================
+   Authentication
+   ========================================================================== */
 
 async function getAuthHeaders(): Promise<
   Record<string, string>
@@ -107,11 +144,9 @@ async function getAuthHeaders(): Promise<
   };
 }
 
-/*
-|--------------------------------------------------------------------------
-| Generic API Response Helper
-|--------------------------------------------------------------------------
-*/
+/* ==========================================================================
+   Generic API Response Helper
+   ========================================================================== */
 
 async function parseResponse(
   response: Response
@@ -141,11 +176,9 @@ async function parseResponse(
   return data;
 }
 
-/*
-|--------------------------------------------------------------------------
-| JOURNALS
-|--------------------------------------------------------------------------
-*/
+/* ==========================================================================
+   JOURNALS
+   ========================================================================== */
 
 /*
  * Create Journal Entry
@@ -165,7 +198,9 @@ export async function createJournal(
     }
   );
 
-  const data = await parseResponse(response);
+  const data = await parseResponse(
+    response
+  );
 
   return data.journal;
 }
@@ -186,7 +221,9 @@ export async function getJournals(): Promise<
     }
   );
 
-  const data = await parseResponse(response);
+  const data = await parseResponse(
+    response
+  );
 
   return data.journals ?? [];
 }
@@ -210,11 +247,9 @@ export async function deleteJournal(
   await parseResponse(response);
 }
 
-/*
-|--------------------------------------------------------------------------
-| CHAT
-|--------------------------------------------------------------------------
-*/
+/* ==========================================================================
+   CHAT
+   ========================================================================== */
 
 /*
  * Send Chat Message
@@ -236,7 +271,9 @@ export async function sendChat(
     }
   );
 
-  const data = await parseResponse(response);
+  const data = await parseResponse(
+    response
+  );
 
   return data.reply;
 }
@@ -257,7 +294,9 @@ export async function loadHistory(): Promise<
     }
   );
 
-  const data = await parseResponse(response);
+  const data = await parseResponse(
+    response
+  );
 
   return data.messages ?? [];
 }
@@ -279,11 +318,9 @@ export async function clearHistory(): Promise<void> {
   await parseResponse(response);
 }
 
-/*
-|--------------------------------------------------------------------------
-| RECOVERY PROFILE
-|--------------------------------------------------------------------------
-*/
+/* ==========================================================================
+   RECOVERY PROFILE
+   ========================================================================== */
 
 /*
  * Get Recovery Profile
@@ -301,7 +338,9 @@ export async function getProfile(): Promise<
     }
   );
 
-  const data = await parseResponse(response);
+  const data = await parseResponse(
+    response
+  );
 
   return data.profile ?? null;
 }
@@ -313,12 +352,15 @@ export async function getProfile(): Promise<
 export async function createProfile(
   profile: Omit<
     RecoveryProfile,
-    "id" | "user_id" | "created_at" | "updated_at"
+    | "id"
+    | "user_id"
+    | "created_at"
+    | "updated_at"
   >
 ): Promise<RecoveryProfile> {
   /*
-   * Make absolutely sure an empty reminder time
-   * never reaches PostgreSQL as "".
+   * Make absolutely sure an empty reminder
+   * time never reaches PostgreSQL as "".
    */
 
   const payload = {
@@ -342,7 +384,9 @@ export async function createProfile(
     }
   );
 
-  const data = await parseResponse(response);
+  const data = await parseResponse(
+    response
+  );
 
   return data.profile;
 }
@@ -355,9 +399,7 @@ export async function updateProfile(
   profile: Partial<RecoveryProfile>
 ): Promise<RecoveryProfile> {
   /*
-   * IMPORTANT:
-   *
-   * Convert "" to NULL before sending the request.
+   * Convert "" to NULL before sending.
    *
    * This prevents:
    *
@@ -389,7 +431,69 @@ export async function updateProfile(
     }
   );
 
-  const data = await parseResponse(response);
+  const data = await parseResponse(
+    response
+  );
 
   return data.profile;
+}
+
+/* ==========================================================================
+   PREMIUM SUBSCRIPTION
+   ========================================================================== */
+
+/*
+ * Get authenticated user's subscription.
+ *
+ * GET /api/subscription
+ *
+ * The backend automatically creates a FREE
+ * subscription if the authenticated user does
+ * not already have one.
+ */
+
+export async function getSubscription(): Promise<
+  Subscription
+> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/subscription`,
+    {
+      method: "GET",
+
+      headers: await getAuthHeaders(),
+    }
+  );
+
+  const data = await parseResponse(
+    response
+  );
+
+  if (!data.subscription) {
+    throw new Error(
+      "Subscription information was not returned by the server."
+    );
+  }
+
+  return data.subscription;
+}
+
+/*
+ * Check whether the current user has
+ * an active Premium subscription.
+ *
+ * This is a convenience function for
+ * components that only need true/false.
+ */
+
+export async function checkPremiumStatus(): Promise<boolean> {
+  const subscription =
+    await getSubscription();
+
+  return (
+    subscription.plan === "premium" &&
+    (
+      subscription.status === "active" ||
+      subscription.status === "trialing"
+    )
+  );
 }

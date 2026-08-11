@@ -16,33 +16,20 @@ import subscriptionRoutes from "./routes/subscriptionRoutes.js";
 
 const app = express();
 
-/*
-|--------------------------------------------------------------------------
-| Express Configuration
-|--------------------------------------------------------------------------
-*/
+/* -------------------------------------------------------------------------- */
+/* Express Configuration                                                      */
+/* -------------------------------------------------------------------------- */
 
 app.set("trust proxy", 1);
 
-/*
-|--------------------------------------------------------------------------
-| CORS
-|--------------------------------------------------------------------------
-|
-| Supports:
-|
-| - Production Vercel deployment
-| - Git-main Vercel deployment
-| - Local development
-| - Additional origins through FRONTEND_URLS
-|
-|--------------------------------------------------------------------------
-*/
+/* -------------------------------------------------------------------------- */
+/* CORS                                                                       */
+/* -------------------------------------------------------------------------- */
 
 const allowedOrigins = [
   env.FRONTEND_URL,
 
-  // Current Resolve Vercel deployments
+  // Resolve production
   "https://resolve-web-two.vercel.app",
   "https://resolve-web-git-main-mugohillarys-projects.vercel.app",
 
@@ -50,7 +37,7 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
 
-  // Additional origins supplied through Render
+  // Additional origins supplied through environment variables
   ...(process.env.FRONTEND_URLS
     ? process.env.FRONTEND_URLS
         .split(",")
@@ -64,8 +51,12 @@ console.log(allowedOrigins);
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    // Allow requests without an Origin header,
-    // such as server-to-server requests or health checks.
+    /*
+     * Requests without an Origin header can come from:
+     * - server-to-server requests
+     * - health checks
+     * - some extension/background requests
+     */
     if (!origin) {
       return callback(null, true);
     }
@@ -98,11 +89,9 @@ const corsOptions: cors.CorsOptions = {
   ],
 };
 
-/*
-|--------------------------------------------------------------------------
-| Middleware
-|--------------------------------------------------------------------------
-*/
+/* -------------------------------------------------------------------------- */
+/* Middleware                                                                 */
+/* -------------------------------------------------------------------------- */
 
 app.use(cors(corsOptions));
 
@@ -114,54 +103,89 @@ app.use(express.json());
 
 app.use(requestLogger);
 
-/*
-|--------------------------------------------------------------------------
-| Routes
-|--------------------------------------------------------------------------
-*/
+/* -------------------------------------------------------------------------- */
+/* Routes                                                                     */
+/* -------------------------------------------------------------------------- */
 
-// Health Check
+/*
+ * Health
+ *
+ * GET /
+ */
 app.use("/", healthRoutes);
 
-// Journal API
+/*
+ * Journal
+ *
+ * GET    /api/journal
+ * POST   /api/journal
+ * DELETE /api/journal/:id
+ */
 app.use("/api/journal", journalRoutes);
 
-// AI Chat API
+/*
+ * AI Chat
+ *
+ * POST   /api/chat
+ * GET    /api/chat/history
+ * DELETE /api/chat/history
+ */
 app.use("/api/chat", chatRoutes);
 
-// Recovery Profile API
+/*
+ * Recovery Profile
+ *
+ * GET  /api/profile
+ * POST /api/profile
+ * PUT  /api/profile
+ */
 app.use("/api/profile", profileRoutes);
 
-// Website Blocker API
+/*
+ * Website Blocker
+ *
+ * GET /api/blocker
+ *
+ * This route is authenticated by blockerRoutes.ts.
+ */
 app.use("/api/blocker", blockerRoutes);
 
-// Resolve Events API
+/*
+ * Resolve Events
+ *
+ * POST /api/events
+ */
 app.use("/api/events", eventRoutes);
 
-// Resolve Premium Subscription API
+/*
+ * Premium Subscription
+ *
+ * GET/POST/etc. /api/subscription
+ */
 app.use(
   "/api/subscription",
   subscriptionRoutes
 );
 
-/*
-|--------------------------------------------------------------------------
-| 404 Handler
-|--------------------------------------------------------------------------
-*/
+/* -------------------------------------------------------------------------- */
+/* 404 Handler                                                                */
+/* -------------------------------------------------------------------------- */
 
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: "Route not found.",
-  });
-});
+app.use(
+  (
+    req: express.Request,
+    res: express.Response
+  ) => {
+    res.status(404).json({
+      success: false,
+      message: "Route not found.",
+    });
+  }
+);
 
-/*
-|--------------------------------------------------------------------------
-| Global Error Handler
-|--------------------------------------------------------------------------
-*/
+/* -------------------------------------------------------------------------- */
+/* Global Error Handler                                                       */
+/* -------------------------------------------------------------------------- */
 
 app.use(
   (
@@ -172,7 +196,9 @@ app.use(
   ) => {
     console.error("❌ API Error:", err);
 
-    // CORS errors
+    /*
+     * CORS errors
+     */
     if (
       err.message?.startsWith(
         "CORS blocked origin"
@@ -184,7 +210,10 @@ app.use(
       });
     }
 
-    res.status(err.status || 500).json({
+    /*
+     * General API error
+     */
+    return res.status(err.status || 500).json({
       success: false,
       message:
         err.message ||
@@ -193,11 +222,9 @@ app.use(
   }
 );
 
-/*
-|--------------------------------------------------------------------------
-| Start Server
-|--------------------------------------------------------------------------
-*/
+/* -------------------------------------------------------------------------- */
+/* Start Server                                                               */
+/* -------------------------------------------------------------------------- */
 
 const server = app.listen(
   env.PORT,
@@ -231,6 +258,10 @@ const server = app.listen(
     );
 
     console.log(
+      "🛡️ Blocker     : /api/blocker"
+    );
+
+    console.log(
       "💎 Premium     : /api/subscription"
     );
 
@@ -240,11 +271,9 @@ const server = app.listen(
   }
 );
 
-/*
-|--------------------------------------------------------------------------
-| Graceful Shutdown
-|--------------------------------------------------------------------------
-*/
+/* -------------------------------------------------------------------------- */
+/* Graceful Shutdown                                                          */
+/* -------------------------------------------------------------------------- */
 
 function shutdown(signal: string) {
   console.log(`\n⚠️ Received ${signal}`);

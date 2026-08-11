@@ -21,5 +21,8 @@
     "@types/chrome": "^0.2.2",
     "esbuild": "^0.28.1",
     "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.110.7"
   }
 }

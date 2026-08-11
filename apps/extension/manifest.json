@@ -1,10 +1,8 @@
 {
   "manifest_version": 3,
-
   "name": "Resolve Recovery",
   "short_name": "Resolve",
   "version": "1.0.0",
-
   "description": "AI-powered recovery assistant with smart website blocking and recovery support.",
 
   "permissions": [
@@ -17,8 +15,18 @@
   ],
 
   "host_permissions": [
-    "<all_urls>"
+    "<all_urls>",
+    "https://resolve-api-ty79.onrender.com/*"
   ],
+
+  "externally_connectable": {
+    "matches": [
+      "https://resolve-web-two.vercel.app/*",
+      "https://resolve-web-git-main-mugohillarys-projects.vercel.app/*",
+      "http://localhost:5173/*",
+      "http://localhost:3000/*"
+    ]
+  },
 
   "declarative_net_request": {
     "rule_resources": []

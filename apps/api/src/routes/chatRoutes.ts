@@ -1,6 +1,8 @@
 import { Router } from "express";
 
 import { requireAuth } from "../middleware/requireAuth.js";
+import { requirePremium } from "../middleware/requirePremium.js";
+
 import {
   chat,
   getHistory,
@@ -9,10 +11,48 @@ import {
 
 const router = Router();
 
-router.post("/", requireAuth, chat);
+/*
+|--------------------------------------------------------------------------
+| AI Chat
+|--------------------------------------------------------------------------
+| Resolve AI Coach is a Premium feature.
+|
+| Authentication:
+|   requireAuth
+|
+| Premium entitlement:
+|   requirePremium
+|--------------------------------------------------------------------------
+*/
 
-router.get("/history", requireAuth, getHistory);
+router.post(
+  "/",
+  requireAuth,
+  requirePremium,
+  chat
+);
 
-router.delete("/history", requireAuth, deleteHistory);
+/*
+|--------------------------------------------------------------------------
+| Chat History
+|--------------------------------------------------------------------------
+| Chat history belongs to the AI Coach feature,
+| so it is also Premium-protected.
+|--------------------------------------------------------------------------
+*/
+
+router.get(
+  "/history",
+  requireAuth,
+  requirePremium,
+  getHistory
+);
+
+router.delete(
+  "/history",
+  requireAuth,
+  requirePremium,
+  deleteHistory
+);
 
 export default router;
