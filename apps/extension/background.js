@@ -7,98 +7,150 @@ var DEFAULT_SETTINGS = {
   customSites: []
 };
 async function getSettings() {
-  const data = await chrome.storage.sync.get("settings");
-  return data.settings ?? DEFAULT_SETTINGS;
+  const data = await chrome.storage.sync.get(
+    "settings"
+  );
+  const settings = data.settings;
+  return {
+    gambling: settings?.gambling ?? DEFAULT_SETTINGS.gambling,
+    adult: settings?.adult ?? DEFAULT_SETTINGS.adult,
+    social: settings?.social ?? DEFAULT_SETTINGS.social,
+    gaming: settings?.gaming ?? DEFAULT_SETTINGS.gaming,
+    customSites: Array.isArray(
+      settings?.customSites
+    ) ? settings.customSites : []
+  };
 }
 
-// rules/defaultRules.ts
+// rules/buildRules.ts
 var gamblingSites = [
-  "betika.com",
-  "1xbet.com",
+  "bet365.com",
   "betway.com",
-  "sportpesa.com"
+  "1xbet.com",
+  "22bet.com"
 ];
 var adultSites = [
   "pornhub.com",
   "xvideos.com",
-  "xnxx.com",
-  "redtube.com"
+  "xnxx.com"
 ];
 var socialSites = [
   "facebook.com",
   "instagram.com",
-  "tiktok.com",
-  "twitter.com",
-  "x.com",
-  "snapchat.com"
+  "tiktok.com"
 ];
 var gamingSites = [
-  "store.steampowered.com",
-  "epicgames.com",
-  "roblox.com"
+  "roblox.com",
+  "steam.com",
+  "steampowered.com"
 ];
-
-// rules/buildRules.ts
+function normalizeDomain(site) {
+  return site.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].trim();
+}
 function buildWebsiteList(settings) {
   const websites = /* @__PURE__ */ new Set();
+  if (!settings) {
+    return [];
+  }
   if (settings.gambling) {
-    gamblingSites.forEach((site) => websites.add(site));
+    gamblingSites.forEach(
+      (site) => websites.add(
+        normalizeDomain(site)
+      )
+    );
   }
   if (settings.adult) {
-    adultSites.forEach((site) => websites.add(site));
+    adultSites.forEach(
+      (site) => websites.add(
+        normalizeDomain(site)
+      )
+    );
   }
   if (settings.social) {
-    socialSites.forEach((site) => websites.add(site));
+    socialSites.forEach(
+      (site) => websites.add(
+        normalizeDomain(site)
+      )
+    );
   }
   if (settings.gaming) {
-    gamingSites.forEach((site) => websites.add(site));
+    gamingSites.forEach(
+      (site) => websites.add(
+        normalizeDomain(site)
+      )
+    );
   }
-  settings.customSites.forEach(
-    (site) => websites.add(site)
-  );
+  if (Array.isArray(
+    settings.customSites
+  )) {
+    settings.customSites.forEach(
+      (site) => {
+        const normalized = normalizeDomain(site);
+        if (normalized) {
+          websites.add(
+            normalized
+          );
+        }
+      }
+    );
+  }
   return [...websites];
 }
 
 // background/blockerEngine.ts
 var MAX_DYNAMIC_RULES = 3e4;
-async function clearBlockingRules() {
-  try {
-    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-    if (existingRules.length === 0) {
-      return;
-    }
-    const removeRuleIds = existingRules.map(
-      (rule) => rule.id
-    );
-    await chrome.declarativeNetRequest.updateDynamicRules({
-      removeRuleIds
-    });
-    console.log(
-      `\u{1F9F9} Resolve removed ${removeRuleIds.length} old blocking rules.`
-    );
-  } catch (error) {
-    console.error(
-      "\u274C Failed to clear Resolve blocking rules:",
-      error
-    );
-    throw error;
-  }
+var RESOLVE_RULE_ID_START = 1e5;
+function isResolveRule(rule) {
+  const hasResolveId = rule.id >= RESOLVE_RULE_ID_START && rule.id < RESOLVE_RULE_ID_START + MAX_DYNAMIC_RULES;
+  const isBlockedPageRedirect = rule.action?.type === "redirect" && rule.action.redirect?.extensionPath === "/blocked.html";
+  return hasResolveId || isBlockedPageRedirect;
+}
+function normalizeDomain2(site) {
+  return site.trim().toLowerCase().replace(
+    /^https?:\/\//,
+    ""
+  ).replace(
+    /^www\./,
+    ""
+  ).replace(
+    /\/.*$/,
+    ""
+  ).trim();
 }
 async function applyBlockingRules(sites) {
   try {
+    if (!chrome.declarativeNetRequest) {
+      throw new Error(
+        "Declarative Net Request API is unavailable."
+      );
+    }
     const uniqueSites = [
       ...new Set(
-        sites.map(
-          (site) => site.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "")
-        ).filter(Boolean)
+        sites.map(normalizeDomain2).filter(Boolean)
       )
     ];
     const limitedSites = uniqueSites.slice(
       0,
       MAX_DYNAMIC_RULES
     );
-    await clearBlockingRules();
+    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
+    const resolveRules = existingRules.filter(
+      isResolveRule
+    );
+    const removeRuleIds = resolveRules.map(
+      (rule) => rule.id
+    );
     if (limitedSites.length === 0) {
+      if (removeRuleIds.length > 0) {
+        await chrome.declarativeNetRequest.updateDynamicRules(
+          {
+            removeRuleIds
+          }
+        );
+        console.log(
+          `\u{1F9F9} Resolve removed ${removeRuleIds.length} old blocking rules.`
+        );
+      }
       console.log(
         "\u{1F6E1}\uFE0F Resolve blocking list is empty."
       );
@@ -106,7 +158,7 @@ async function applyBlockingRules(sites) {
     }
     const rules = limitedSites.map(
       (domain, index) => ({
-        id: index + 1,
+        id: RESOLVE_RULE_ID_START + index,
         priority: 1,
         action: {
           type: "redirect",
@@ -122,11 +174,18 @@ async function applyBlockingRules(sites) {
         }
       })
     );
-    await chrome.declarativeNetRequest.updateDynamicRules({
-      addRules: rules
-    });
+    await chrome.declarativeNetRequest.updateDynamicRules(
+      {
+        removeRuleIds,
+        addRules: rules
+      }
+    );
     console.log(
-      `\u2705 Resolve installed ${rules.length} redirect rules.`
+      `\u{1F6E1}\uFE0F Resolve installed ${rules.length} redirect rules.`
+    );
+    console.log(
+      "\u{1F310} Resolve blocked websites:",
+      limitedSites
     );
   } catch (error) {
     console.error(
@@ -192,6 +251,7 @@ async function recordBlockedAttempt() {
 // services/syncService.ts
 var API_BASE_URL = "http://localhost:4000";
 var SESSION_STORAGE_KEY = "resolveSession";
+var SETTINGS_STORAGE_KEY = "settings";
 async function saveResolveSession(session) {
   await chrome.storage.local.set({
     [SESSION_STORAGE_KEY]: session
@@ -220,6 +280,9 @@ async function syncSettingsFromResolve() {
       );
       return null;
     }
+    console.log(
+      "\u{1F504} Syncing Resolve settings from API..."
+    );
     const response = await fetch(
       `${API_BASE_URL}/api/blocker`,
       {
@@ -268,6 +331,9 @@ async function syncSettingsFromResolve() {
         settings.custom_sites
       ) ? settings.custom_sites : []
     };
+    await chrome.storage.sync.set({
+      [SETTINGS_STORAGE_KEY]: normalizedSettings
+    });
     console.log(
       "\u2705 Resolve blocker settings synced:",
       normalizedSettings
@@ -291,10 +357,17 @@ async function initialize() {
   }
   initializationPromise = (async () => {
     try {
-      await syncSettingsFromResolve();
-      const settings = await getSettings();
+      console.log("\u{1F504} Resolve initialization started.");
+      const syncedSettings = await syncSettingsFromResolve();
+      const settings = syncedSettings ?? await getSettings();
       blockedSites = buildWebsiteList(settings);
-      await applyBlockingRules(blockedSites);
+      console.log(
+        "\u{1F6E1}\uFE0F Resolve blocking sites:",
+        blockedSites
+      );
+      await applyBlockingRules(
+        blockedSites
+      );
       console.log(
         `\u2705 Resolve initialized with ${blockedSites.length} blocked websites.`
       );
@@ -310,9 +383,10 @@ async function initialize() {
   return initializationPromise;
 }
 chrome.runtime.onInstalled.addListener(
-  async () => {
+  async (details) => {
     console.log(
-      "\u{1F680} Resolve extension installed."
+      "\u{1F680} Resolve extension installed.",
+      details.reason
     );
     await initialize();
   }
@@ -327,15 +401,15 @@ chrome.runtime.onStartup.addListener(
 );
 chrome.storage.onChanged.addListener(
   async (changes, areaName) => {
-    if (areaName !== "local") {
+    const sessionChanged = areaName === "local" && Boolean(changes.resolveSession);
+    const settingsChanged = areaName === "sync" && Boolean(changes.settings);
+    if (!sessionChanged && !settingsChanged) {
       return;
     }
-    if (changes.resolveSession || changes.settings) {
-      console.log(
-        "\u{1F504} Resolve settings/session changed. Reinitializing..."
-      );
-      await initialize();
-    }
+    console.log(
+      "\u{1F504} Resolve storage changed. Reinitializing..."
+    );
+    await initialize();
   }
 );
 chrome.webNavigation.onBeforeNavigate.addListener(
@@ -344,17 +418,18 @@ chrome.webNavigation.onBeforeNavigate.addListener(
       return;
     }
     try {
-      const url = new URL(
-        details.url
-      );
-      const hostname = url.hostname.replace(
-        /^www\./,
-        ""
-      );
+      const url = new URL(details.url);
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        return;
+      }
+      const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
       const blocked = blockedSites.some(
-        (site) => hostname === site || hostname.endsWith(
-          "." + site
-        )
+        (site) => {
+          const normalizedSite = site.trim().toLowerCase().replace(/^www\./, "");
+          return hostname === normalizedSite || hostname.endsWith(
+            "." + normalizedSite
+          );
+        }
       );
       if (!blocked) {
         return;
@@ -362,7 +437,14 @@ chrome.webNavigation.onBeforeNavigate.addListener(
       console.log(
         `\u{1F6E1}\uFE0F Resolve blocked: ${hostname}`
       );
-      await recordBlockedAttempt();
+      try {
+        await recordBlockedAttempt();
+      } catch (statsError) {
+        console.error(
+          "\u26A0\uFE0F Failed to record blocked attempt:",
+          statsError
+        );
+      }
       try {
         await emitEvent({
           type: "site_blocked",
@@ -393,12 +475,13 @@ chrome.runtime.onMessageExternal.addListener(
       "http://localhost:5173",
       "http://localhost:3000"
     ];
-    if (sender.origin && !allowedOrigins.includes(
-      sender.origin
+    const senderOrigin = sender.origin;
+    if (!senderOrigin || !allowedOrigins.includes(
+      senderOrigin
     )) {
       console.warn(
         "\u{1F6AB} Rejected external message from:",
-        sender.origin
+        senderOrigin
       );
       sendResponse({
         success: false,
@@ -409,7 +492,8 @@ chrome.runtime.onMessageExternal.addListener(
     if (message?.type === "RESOLVE_CONNECT_ACCOUNT") {
       (async () => {
         try {
-          if (!message.session?.access_token) {
+          const session = message.session;
+          if (!session?.access_token) {
             throw new Error(
               "No Resolve access token provided."
             );
@@ -418,7 +502,7 @@ chrome.runtime.onMessageExternal.addListener(
             "\u{1F510} Connecting Resolve account..."
           );
           await saveResolveSession(
-            message.session
+            session
           );
           await initialize();
           console.log(
@@ -434,7 +518,7 @@ chrome.runtime.onMessageExternal.addListener(
           );
           sendResponse({
             success: false,
-            message: error?.message || "Failed to connect account."
+            message: error instanceof Error ? error.message : "Failed to connect account."
           });
         }
       })();
@@ -462,7 +546,7 @@ chrome.runtime.onMessageExternal.addListener(
           );
           sendResponse({
             success: false,
-            message: error?.message || "Failed to disconnect account."
+            message: error instanceof Error ? error.message : "Failed to disconnect account."
           });
         }
       })();
@@ -491,13 +575,21 @@ chrome.runtime.onMessageExternal.addListener(
             connected: false,
             userId: null,
             email: null,
-            message: error?.message || "Failed to get connection status."
+            message: error instanceof Error ? error.message : "Failed to get connection status."
           });
         }
       })();
       return true;
     }
+    console.warn(
+      "\u26A0\uFE0F Unknown Resolve external message:",
+      message?.type
+    );
+    sendResponse({
+      success: false,
+      message: "Unknown Resolve message type."
+    });
     return false;
   }
 );
-initialize();
+void initialize();

@@ -1,22 +1,12 @@
-import {
-  getSettings,
-} from "./storage/settings";
+import { getSettings } from "./storage/settings";
 
-import {
-  buildWebsiteList,
-} from "./rules/buildRules";
+import { buildWebsiteList } from "./rules/buildRules";
 
-import {
-  applyBlockingRules,
-} from "./background/blockerEngine";
+import { applyBlockingRules } from "./background/blockerEngine";
 
-import {
-  emitEvent,
-} from "./events/eventBus";
+import { emitEvent } from "./events/eventBus";
 
-import {
-  recordBlockedAttempt,
-} from "./stats";
+import { recordBlockedAttempt } from "./stats";
 
 import {
   syncSettingsFromResolve,
@@ -31,15 +21,15 @@ import {
 
 let blockedSites: string[] = [];
 
-/*
- * Prevent multiple initialization processes from running at the same time.
+/**
+ * Prevent multiple initialization processes from running simultaneously.
  *
- * This is important because initialize() can be triggered by:
+ * Initialization can be triggered by:
  * - extension installation
  * - browser startup
  * - storage changes
  * - account connection
- * - initial service-worker startup
+ * - service-worker startup
  */
 let initializationPromise: Promise<void> | null = null;
 
@@ -48,9 +38,9 @@ let initializationPromise: Promise<void> | null = null;
 /* -------------------------------------------------------------------------- */
 
 async function initialize(): Promise<void> {
-  /*
-   * If initialization is already running, wait for that same operation
-   * instead of starting another DNR update.
+  /**
+   * If initialization is already running, wait for it instead
+   * of starting another DNR update.
    */
   if (initializationPromise) {
     return initializationPromise;
@@ -58,29 +48,41 @@ async function initialize(): Promise<void> {
 
   initializationPromise = (async () => {
     try {
-      /*
-       * First synchronize the logged-in Resolve user's settings.
+      console.log("🔄 Resolve initialization started.");
+
+      /**
+       * Try to synchronize the logged-in Resolve user's settings.
        *
-       * If there is no connected Resolve account, the sync service
-       * should simply leave the existing local settings untouched.
+       * If there is no connected account, this returns null and
+       * we continue using the locally stored settings.
        */
-      await syncSettingsFromResolve();
+      const syncedSettings =
+        await syncSettingsFromResolve();
 
-      /*
-       * Load the latest local settings.
+      /**
+       * Use the freshly synchronized settings when available.
+       * Otherwise fall back to local extension settings.
        */
-      const settings = await getSettings();
+      const settings =
+        syncedSettings ?? await getSettings();
 
-      /*
-       * Convert settings into the actual list of websites
-       * that Resolve should block.
+      /**
+       * Convert settings into the actual website list.
        */
-      blockedSites = buildWebsiteList(settings);
+      blockedSites =
+        buildWebsiteList(settings);
 
-      /*
-       * Replace the current Declarative Net Request rules.
+      console.log(
+        "🛡️ Resolve blocking sites:",
+        blockedSites
+      );
+
+      /**
+       * Replace the current DNR rules.
        */
-      await applyBlockingRules(blockedSites);
+      await applyBlockingRules(
+        blockedSites
+      );
 
       console.log(
         `✅ Resolve initialized with ${blockedSites.length} blocked websites.`
@@ -91,10 +93,6 @@ async function initialize(): Promise<void> {
         error
       );
     } finally {
-      /*
-       * Allow future initialization requests after the
-       * current initialization has completed.
-       */
       initializationPromise = null;
     }
   })();
@@ -107,9 +105,10 @@ async function initialize(): Promise<void> {
 /* -------------------------------------------------------------------------- */
 
 chrome.runtime.onInstalled.addListener(
-  async () => {
+  async (details) => {
     console.log(
-      "🚀 Resolve extension installed."
+      "🚀 Resolve extension installed.",
+      details.reason
     );
 
     await initialize();
@@ -130,29 +129,35 @@ chrome.runtime.onStartup.addListener(
 /* Storage Changes                                                            */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Blocker settings use chrome.storage.sync.
+ *
+ * Resolve session uses chrome.storage.local.
+ *
+ * Therefore we listen to BOTH storage areas.
+ */
 chrome.storage.onChanged.addListener(
   async (changes, areaName) => {
-    /*
-     * Only respond to local storage changes.
-     */
-    if (areaName !== "local") {
+    const sessionChanged =
+      areaName === "local" &&
+      Boolean(changes.resolveSession);
+
+    const settingsChanged =
+      areaName === "sync" &&
+      Boolean(changes.settings);
+
+    if (
+      !sessionChanged &&
+      !settingsChanged
+    ) {
       return;
     }
 
-    /*
-     * Reinitialize when Resolve account/session
-     * or blocker settings change.
-     */
-    if (
-      changes.resolveSession ||
-      changes.settings
-    ) {
-      console.log(
-        "🔄 Resolve settings/session changed. Reinitializing..."
-      );
+    console.log(
+      "🔄 Resolve storage changed. Reinitializing..."
+    );
 
-      await initialize();
-    }
+    await initialize();
   }
 );
 
@@ -160,50 +165,67 @@ chrome.storage.onChanged.addListener(
 /* Website Blocking Logger                                                    */
 /* -------------------------------------------------------------------------- */
 
-/*
- * The actual blocking is performed by Declarative Net Request.
+/**
+ * Declarative Net Request performs the actual blocking.
  *
  * This listener is only responsible for:
- * - detecting a navigation to a blocked domain
+ *
+ * - detecting navigation to a blocked domain
  * - recording the blocked attempt
- * - sending an analytics event to the Resolve API
+ * - sending an analytics event
  */
 chrome.webNavigation.onBeforeNavigate.addListener(
   async (details) => {
-    /*
-     * Only process the main page.
-     *
-     * Ignore iframes and subframes.
+    /**
+     * Only process top-level navigation.
      */
     if (details.frameId !== 0) {
       return;
     }
 
     try {
-      const url = new URL(
-        details.url
-      );
+      const url =
+        new URL(details.url);
 
-      /*
+      /**
+       * Ignore browser/internal URLs.
+       */
+      if (
+        url.protocol !== "http:" &&
+        url.protocol !== "https:"
+      ) {
+        return;
+      }
+
+      /**
        * Normalize hostname.
        */
       const hostname =
-        url.hostname.replace(
-          /^www\./,
-          ""
-        );
+        url.hostname
+          .toLowerCase()
+          .replace(/^www\./, "");
 
-      /*
-       * Determine whether this hostname
-       * belongs to one of Resolve's blocked domains.
+      /**
+       * Check whether the hostname belongs
+       * to one of Resolve's blocked domains.
        */
       const blocked =
         blockedSites.some(
-          (site) =>
-            hostname === site ||
-            hostname.endsWith(
-              "." + site
-            )
+          (site) => {
+            const normalizedSite =
+              site
+                .trim()
+                .toLowerCase()
+                .replace(/^www\./, "");
+
+            return (
+              hostname ===
+                normalizedSite ||
+              hostname.endsWith(
+                "." + normalizedSite
+              )
+            );
+          }
         );
 
       if (!blocked) {
@@ -214,16 +236,25 @@ chrome.webNavigation.onBeforeNavigate.addListener(
         `🛡️ Resolve blocked: ${hostname}`
       );
 
-      /*
-       * Update local recovery statistics.
-       */
-      await recordBlockedAttempt();
-
-      /*
-       * Send blocked-site event to Resolve backend.
+      /**
+       * Record the attempt locally.
        *
-       * Failure to send analytics must NOT prevent
-       * the browser blocking mechanism from working.
+       * Failure here should not affect
+       * the blocking mechanism.
+       */
+      try {
+        await recordBlockedAttempt();
+      } catch (statsError) {
+        console.error(
+          "⚠️ Failed to record blocked attempt:",
+          statsError
+        );
+      }
+
+      /**
+       * Send analytics event.
+       *
+       * Failure here must NOT affect blocking.
        */
       try {
         await emitEvent({
@@ -259,9 +290,10 @@ chrome.runtime.onMessageExternal.addListener(
     sender,
     sendResponse
   ) => {
-    /*
-     * These are the Resolve web applications
-     * that are allowed to communicate with the extension.
+    /**
+     * Only these Resolve applications
+     * are allowed to communicate with
+     * the extension.
      */
     const allowedOrigins = [
       "https://resolve-web-two.vercel.app",
@@ -270,18 +302,22 @@ chrome.runtime.onMessageExternal.addListener(
       "http://localhost:3000",
     ];
 
-    /*
-     * Reject messages from unknown origins.
+    /**
+     * Chrome/Edge normally provides sender.origin
+     * for externally connected web pages.
      */
+    const senderOrigin =
+      sender.origin;
+
     if (
-      sender.origin &&
+      !senderOrigin ||
       !allowedOrigins.includes(
-        sender.origin
+        senderOrigin
       )
     ) {
       console.warn(
         "🚫 Rejected external message from:",
-        sender.origin
+        senderOrigin
       );
 
       sendResponse({
@@ -303,11 +339,15 @@ chrome.runtime.onMessageExternal.addListener(
     ) {
       (async () => {
         try {
-          /*
-           * A Supabase session must contain an access token.
+          const session =
+            message.session;
+
+          /**
+           * A valid Supabase session
+           * must contain an access token.
            */
           if (
-            !message.session?.access_token
+            !session?.access_token
           ) {
             throw new Error(
               "No Resolve access token provided."
@@ -318,17 +358,18 @@ chrome.runtime.onMessageExternal.addListener(
             "🔐 Connecting Resolve account..."
           );
 
-          /*
-           * Save the authenticated Resolve session
-           * in extension local storage.
+          /**
+           * Save session to extension
+           * local storage.
            */
           await saveResolveSession(
-            message.session
+            session
           );
 
-          /*
-           * Immediately synchronize the user's
-           * blocker settings and rebuild the DNR rules.
+          /**
+           * Immediately synchronize
+           * Resolve settings and rebuild
+           * blocking rules.
            */
           await initialize();
 
@@ -339,7 +380,7 @@ chrome.runtime.onMessageExternal.addListener(
           sendResponse({
             success: true,
           });
-        } catch (error: any) {
+        } catch (error) {
           console.error(
             "❌ Failed to connect Resolve account:",
             error
@@ -349,15 +390,16 @@ chrome.runtime.onMessageExternal.addListener(
             success: false,
 
             message:
-              error?.message ||
-              "Failed to connect account.",
+              error instanceof Error
+                ? error.message
+                : "Failed to connect account.",
           });
         }
       })();
 
-      /*
-       * Keep the message channel open for the
-       * asynchronous response.
+      /**
+       * Keep the message channel open
+       * for the asynchronous response.
        */
       return true;
     }
@@ -376,18 +418,18 @@ chrome.runtime.onMessageExternal.addListener(
             "🔓 Disconnecting Resolve account..."
           );
 
-          /*
-           * Remove the stored Resolve session.
+          /**
+           * Remove stored session.
            */
           await clearResolveSession();
 
-          /*
-           * Clear the in-memory website list.
+          /**
+           * Clear in-memory blocking list.
            */
           blockedSites = [];
 
-          /*
-           * Remove all active DNR blocking rules.
+          /**
+           * Remove active DNR rules.
            */
           await applyBlockingRules([]);
 
@@ -398,7 +440,7 @@ chrome.runtime.onMessageExternal.addListener(
           sendResponse({
             success: true,
           });
-        } catch (error: any) {
+        } catch (error) {
           console.error(
             "❌ Failed to disconnect Resolve account:",
             error
@@ -408,8 +450,9 @@ chrome.runtime.onMessageExternal.addListener(
             success: false,
 
             message:
-              error?.message ||
-              "Failed to disconnect account.",
+              error instanceof Error
+                ? error.message
+                : "Failed to disconnect account.",
           });
         }
       })();
@@ -448,7 +491,7 @@ chrome.runtime.onMessageExternal.addListener(
               session?.user?.email ??
               null,
           });
-        } catch (error: any) {
+        } catch (error) {
           console.error(
             "❌ Failed to get Resolve connection status:",
             error
@@ -464,8 +507,9 @@ chrome.runtime.onMessageExternal.addListener(
             email: null,
 
             message:
-              error?.message ||
-              "Failed to get connection status.",
+              error instanceof Error
+                ? error.message
+                : "Failed to get connection status.",
           });
         }
       })();
@@ -473,15 +517,33 @@ chrome.runtime.onMessageExternal.addListener(
       return true;
     }
 
-    /*
-     * Unknown message type.
-     */
+    /* ---------------------------------------------------------------------- */
+    /* Unknown Message                                                        */
+    /* ---------------------------------------------------------------------- */
+
+    console.warn(
+      "⚠️ Unknown Resolve external message:",
+      message?.type
+    );
+
+    sendResponse({
+      success: false,
+      message:
+        "Unknown Resolve message type.",
+    });
+
     return false;
   }
 );
 
 /* -------------------------------------------------------------------------- */
-/* Initial Startup                                                            */
+/* Initial Service Worker Startup                                            */
 /* -------------------------------------------------------------------------- */
 
-initialize();
+/**
+ * The service worker can start without onInstalled/onStartup
+ * firing for the current event.
+ *
+ * Therefore initialize once when this file is evaluated.
+ */
+void initialize();

@@ -1,6 +1,7 @@
 const API_BASE_URL = "http://localhost:4000";
 
 const SESSION_STORAGE_KEY = "resolveSession";
+const SETTINGS_STORAGE_KEY = "settings";
 
 export interface ResolveUser {
   id?: string;
@@ -23,8 +24,7 @@ export interface BlockerSettings {
 }
 
 /**
- * Save the logged-in Resolve/Supabase session
- * inside extension storage.
+ * Save the logged-in Resolve/Supabase session.
  */
 export async function saveResolveSession(
   session: ResolveSession
@@ -46,9 +46,10 @@ export async function getResolveSession(): Promise<
     SESSION_STORAGE_KEY
   );
 
-  const session = result[
-    SESSION_STORAGE_KEY
-  ] as ResolveSession | undefined;
+  const session =
+    result[SESSION_STORAGE_KEY] as
+      | ResolveSession
+      | undefined;
 
   return session ?? null;
 }
@@ -66,7 +67,7 @@ export async function clearResolveSession(): Promise<void> {
 
 /**
  * Fetch the logged-in user's blocker settings
- * from the Resolve API.
+ * from the Resolve API and save them locally.
  */
 export async function syncSettingsFromResolve(): Promise<
   BlockerSettings | null
@@ -81,6 +82,10 @@ export async function syncSettingsFromResolve(): Promise<
 
       return null;
     }
+
+    console.log(
+      "🔄 Syncing Resolve settings from API..."
+    );
 
     const response = await fetch(
       `${API_BASE_URL}/api/blocker`,
@@ -112,22 +117,6 @@ export async function syncSettingsFromResolve(): Promise<
 
     const result = await response.json();
 
-    /*
-     * Supports both:
-     *
-     * {
-     *   success: true,
-     *   settings: {...}
-     * }
-     *
-     * and:
-     *
-     * {
-     *   success: true,
-     *   data: {...}
-     * }
-     */
-
     const settings =
       result?.settings ??
       result?.data ??
@@ -148,12 +137,12 @@ export async function syncSettingsFromResolve(): Promise<
 
       adult: Boolean(
         settings.adult ??
-        settings.adult_content
+          settings.adult_content
       ),
 
       social: Boolean(
         settings.social ??
-        settings.social_media
+          settings.social_media
       ),
 
       gaming: Boolean(
@@ -170,6 +159,16 @@ export async function syncSettingsFromResolve(): Promise<
         ? settings.custom_sites
         : [],
     };
+
+    /*
+     * IMPORTANT:
+     * Save the API settings into the same
+     * storage area used by getSettings().
+     */
+    await chrome.storage.sync.set({
+      [SETTINGS_STORAGE_KEY]:
+        normalizedSettings,
+    });
 
     console.log(
       "✅ Resolve blocker settings synced:",
