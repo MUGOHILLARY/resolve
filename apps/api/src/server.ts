@@ -17,7 +17,7 @@ import subscriptionRoutes from "./routes/subscriptionRoutes.js";
 const app = express();
 
 /* -------------------------------------------------------------------------- */
-/* Express Configuration                                                       */
+/* Express Configuration                                                      */
 /* -------------------------------------------------------------------------- */
 
 app.set("trust proxy", 1);
@@ -26,23 +26,10 @@ app.set("trust proxy", 1);
 /* CORS                                                                       */
 /* -------------------------------------------------------------------------- */
 
-/**
- * IMPORTANT:
- *
- * The web application uses Vercel origins.
- * The browser extension uses an `extensions://` origin.
- *
- * Browser-extension requests generally do not need the same
- * credentialed CORS flow as the web application, so we allow
- * the known web origins explicitly and allow extension requests
- * without reflecting arbitrary origins.
- */
-
 const allowedWebOrigins = [
-  // Environment-configured frontend
   env.FRONTEND_URL,
 
-  // Production Vercel applications
+  // Resolve production
   "https://resolve-web-two.vercel.app",
   "https://resolve-web-git-main-mugohillarys-projects.vercel.app",
 
@@ -50,7 +37,7 @@ const allowedWebOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
 
-  // Additional origins from Render environment variable
+  // Additional origins supplied through environment variables
   ...(process.env.FRONTEND_URLS
     ? process.env.FRONTEND_URLS
         .split(",")
@@ -62,45 +49,44 @@ const allowedWebOrigins = [
 console.log("🌐 Allowed web CORS origins:");
 console.log(allowedWebOrigins);
 
-/**
- * Determine whether an origin belongs to the Resolve extension.
+/*
+ * Chrome/Edge extension origins look like:
+ *
+ * extensions://xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+ *
+ * We cannot use a normal HTTPS origin list for these.
+ * The extension communicates with the API using Authorization headers,
+ * so we explicitly allow extension origins here.
  */
-function isExtensionOrigin(origin: string): boolean {
-  return (
-    origin.startsWith("chrome-extension://") ||
-    origin.startsWith("moz-extension://") ||
-    origin.startsWith("ms-browser-extension://") ||
-    origin.startsWith("extension://")
-  );
+function isExtensionOrigin(
+  origin: string
+): boolean {
+  return origin.startsWith("chrome-extension://");
 }
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
     /*
-     * No Origin header:
+     * Requests without an Origin header can come from:
      *
-     * This can happen with:
-     * - Render health checks
      * - curl
      * - server-to-server requests
-     * - some extension requests
+     * - Render health checks
+     * - browser extension/background requests
      */
     if (!origin) {
       return callback(null, true);
     }
 
     /*
-     * Normal Resolve web application.
+     * Normal Resolve web applications.
      */
     if (allowedWebOrigins.includes(origin)) {
       return callback(null, true);
     }
 
     /*
-     * Browser extension.
-     *
-     * Allow extension origins so the extension can communicate
-     * with the Resolve API.
+     * Resolve browser extension.
      */
     if (isExtensionOrigin(origin)) {
       console.log(
@@ -111,23 +97,18 @@ const corsOptions: cors.CorsOptions = {
       return callback(null, true);
     }
 
-    /*
-     * Unknown origin.
-     */
     console.error(
       "❌ CORS blocked origin:",
       origin
     );
 
     return callback(
-      new Error(`CORS blocked origin: ${origin}`)
+      new Error(
+        `CORS blocked origin: ${origin}`
+      )
     );
   },
 
-  /*
-   * The web frontend uses Authorization headers and Supabase
-   * authentication. Keep credentials enabled for the web app.
-   */
   credentials: true,
 
   methods: [
@@ -153,24 +134,22 @@ const corsOptions: cors.CorsOptions = {
 /*
  * IMPORTANT:
  *
- * Register CORS before routes.
+ * Do NOT add:
+ *
+ * app.options("*", ...)
+ *
+ * Express 5 / path-to-regexp 8 rejects "*" and crashes
+ * the entire API during startup.
+ *
+ * The cors middleware below handles OPTIONS requests.
  */
 app.use(cors(corsOptions));
 
-/*
- * Explicitly answer browser preflight requests.
- */
-app.options("*", cors(corsOptions));
-
 /* -------------------------------------------------------------------------- */
-/* Security / Compression / JSON                                              */
+/* Security / Compression / Body Parsing                                     */
 /* -------------------------------------------------------------------------- */
 
-app.use(
-  helmet({
-    crossOriginResourcePolicy: false,
-  })
-);
+app.use(helmet());
 
 app.use(compression());
 
@@ -186,14 +165,14 @@ app.use(requestLogger);
 /* Routes                                                                     */
 /* -------------------------------------------------------------------------- */
 
-/**
+/*
  * Health
  *
  * GET /
  */
 app.use("/", healthRoutes);
 
-/**
+/*
  * Journal
  *
  * GET    /api/journal
@@ -205,7 +184,7 @@ app.use(
   journalRoutes
 );
 
-/**
+/*
  * AI Chat
  *
  * POST   /api/chat
@@ -217,7 +196,7 @@ app.use(
   chatRoutes
 );
 
-/**
+/*
  * Recovery Profile
  *
  * GET  /api/profile
@@ -229,20 +208,17 @@ app.use(
   profileRoutes
 );
 
-/**
+/*
  * Website Blocker
  *
  * GET /api/blocker
- *
- * This route should authenticate the Resolve
- * browser extension/user.
  */
 app.use(
   "/api/blocker",
   blockerRoutes
 );
 
-/**
+/*
  * Resolve Events
  *
  * POST /api/events
@@ -252,8 +228,10 @@ app.use(
   eventRoutes
 );
 
-/**
+/*
  * Premium Subscription
+ *
+ * /api/subscription
  */
 app.use(
   "/api/subscription",
@@ -293,7 +271,7 @@ app.use(
     );
 
     /*
-     * CORS error.
+     * CORS errors
      */
     if (
       err.message?.startsWith(
@@ -307,7 +285,7 @@ app.use(
     }
 
     /*
-     * General API error.
+     * General API error
      */
     return res.status(
       err.status || 500
@@ -357,18 +335,6 @@ const server = app.listen(
 
     console.log(
       "🛡️ Blocker     : /api/blocker"
-    );
-
-    console.log(
-      "📓 Journal     : /api/journal"
-    );
-
-    console.log(
-      "👤 Profile     : /api/profile"
-    );
-
-    console.log(
-      "🤖 Chat        : /api/chat"
     );
 
     console.log(
