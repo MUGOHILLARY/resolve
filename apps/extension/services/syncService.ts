@@ -1,4 +1,5 @@
-const API_BASE_URL = "http://localhost:4000";
+const API_BASE_URL =
+  "https://resolve-api-ty79.onrender.com";
 
 const SESSION_STORAGE_KEY = "resolveSession";
 const SETTINGS_STORAGE_KEY = "settings";
@@ -6,12 +7,14 @@ const SETTINGS_STORAGE_KEY = "settings";
 export interface ResolveUser {
   id?: string;
   email?: string;
+  [key: string]: unknown;
 }
 
 export interface ResolveSession {
   access_token: string;
   refresh_token?: string;
   expires_at?: number;
+  expires_in?: number;
   user?: ResolveUser;
 }
 
@@ -24,11 +27,17 @@ export interface BlockerSettings {
 }
 
 /**
- * Save the logged-in Resolve/Supabase session.
+ * Save the authenticated Resolve/Supabase session.
  */
 export async function saveResolveSession(
   session: ResolveSession
 ): Promise<void> {
+  if (!session?.access_token) {
+    throw new Error(
+      "Cannot save Resolve session: access token is missing."
+    );
+  }
+
   await chrome.storage.local.set({
     [SESSION_STORAGE_KEY]: session,
   });
@@ -66,14 +75,25 @@ export async function clearResolveSession(): Promise<void> {
 }
 
 /**
- * Fetch the logged-in user's blocker settings
- * from the Resolve API and save them locally.
+ * Save blocker settings locally.
+ */
+async function saveSettings(
+  settings: BlockerSettings
+): Promise<void> {
+  await chrome.storage.sync.set({
+    [SETTINGS_STORAGE_KEY]: settings,
+  });
+}
+
+/**
+ * Fetch blocker settings from the Resolve API.
  */
 export async function syncSettingsFromResolve(): Promise<
   BlockerSettings | null
 > {
   try {
-    const session = await getResolveSession();
+    const session =
+      await getResolveSession();
 
     if (!session?.access_token) {
       console.warn(
@@ -87,20 +107,40 @@ export async function syncSettingsFromResolve(): Promise<
       "🔄 Syncing Resolve settings from API..."
     );
 
+    console.log(
+      "🌐 API URL:",
+      `${API_BASE_URL}/api/blocker`
+    );
+
     const response = await fetch(
       `${API_BASE_URL}/api/blocker`,
       {
         method: "GET",
         headers: {
           Authorization: `Bearer ${session.access_token}`,
-          "Content-Type": "application/json",
+          Accept: "application/json",
         },
       }
     );
 
+    console.log(
+      "📡 Blocker API status:",
+      response.status
+    );
+
     if (!response.ok) {
+      let errorBody = "";
+
+      try {
+        errorBody = await response.text();
+      } catch {
+        errorBody = "";
+      }
+
       console.error(
-        `❌ Resolve blocker API returned ${response.status}`
+        "❌ Resolve blocker API returned:",
+        response.status,
+        errorBody
       );
 
       if (
@@ -110,12 +150,20 @@ export async function syncSettingsFromResolve(): Promise<
         console.warn(
           "🔒 Resolve session is no longer valid."
         );
+
+        await clearResolveSession();
       }
 
       return null;
     }
 
-    const result = await response.json();
+    const result =
+      await response.json();
+
+    console.log(
+      "📥 Resolve blocker API response:",
+      result
+    );
 
     const settings =
       result?.settings ??
@@ -149,26 +197,21 @@ export async function syncSettingsFromResolve(): Promise<
         settings.gaming
       ),
 
-      customSites: Array.isArray(
-        settings.customSites
-      )
-        ? settings.customSites
-        : Array.isArray(
-            settings.custom_sites
-          )
-        ? settings.custom_sites
-        : [],
+      customSites:
+        Array.isArray(
+          settings.customSites
+        )
+          ? settings.customSites
+          : Array.isArray(
+              settings.custom_sites
+            )
+          ? settings.custom_sites
+          : [],
     };
 
-    /*
-     * IMPORTANT:
-     * Save the API settings into the same
-     * storage area used by getSettings().
-     */
-    await chrome.storage.sync.set({
-      [SETTINGS_STORAGE_KEY]:
-        normalizedSettings,
-    });
+    await saveSettings(
+      normalizedSettings
+    );
 
     console.log(
       "✅ Resolve blocker settings synced:",

@@ -1,31 +1,40 @@
+/**
+ * Resolve Declarative Net Request Blocking Engine
+ *
+ * Responsibilities:
+ * - Normalize blocked domains
+ * - Remove old Resolve rules
+ * - Install current Resolve BLOCK rules
+ * - Support up to 30,000 dynamic rules
+ * - Match domains and their subdomains
+ */
+
 const MAX_DYNAMIC_RULES = 30_000;
 
 /**
- * Resolve owns this ID range.
+ * Resolve owns this ID range:
  *
- * 100000 - 129999
- *
- * This prevents collisions with old rules using IDs 1, 2, 3...
+ * 100000 → 129999
  */
 const RESOLVE_RULE_ID_START = 100_000;
 
 /**
- * Get all currently installed dynamic rules.
+ * --------------------------------------------------------------------------
+ * Get Current Rules
+ * --------------------------------------------------------------------------
  */
+
 export async function getBlockingRules(): Promise<
   chrome.declarativeNetRequest.Rule[]
 > {
+  if (!chrome.declarativeNetRequest) {
+    throw new Error(
+      "Declarative Net Request API is unavailable."
+    );
+  }
+
   try {
-    if (!chrome.declarativeNetRequest) {
-      throw new Error(
-        "Declarative Net Request API is unavailable."
-      );
-    }
-
-    const rules =
-      await chrome.declarativeNetRequest.getDynamicRules();
-
-    return rules;
+    return await chrome.declarativeNetRequest.getDynamicRules();
   } catch (error) {
     console.error(
       "❌ Failed to get Resolve blocking rules:",
@@ -37,60 +46,82 @@ export async function getBlockingRules(): Promise<
 }
 
 /**
- * Determine whether a dynamic rule belongs to Resolve.
+ * --------------------------------------------------------------------------
+ * Determine Whether a Rule Belongs to Resolve
+ * --------------------------------------------------------------------------
  *
- * We identify Resolve rules by:
- * - our dedicated ID range
- * OR
- * - the old Resolve blocked.html redirect format.
+ * We recognize:
  *
- * The second condition allows us to clean up rules created by
- * previous versions of the extension.
+ * 1. Current Resolve rules
+ *    IDs 100000 → 129999
+ *
+ * 2. Old Resolve redirect rules
+ *    redirecting to /blocked.html
+ *
+ * This is important because older versions of Resolve used:
+ *
+ * action.type = "redirect"
+ *
+ * while the current version uses:
+ *
+ * action.type = "block"
  */
+
 function isResolveRule(
   rule: chrome.declarativeNetRequest.Rule
 ): boolean {
+  /**
+   * Current Resolve rule ID range.
+   */
   const hasResolveId =
     rule.id >= RESOLVE_RULE_ID_START &&
     rule.id <
-      RESOLVE_RULE_ID_START +
-        MAX_DYNAMIC_RULES;
+      RESOLVE_RULE_ID_START + MAX_DYNAMIC_RULES;
 
-  const isBlockedPageRedirect =
+  /**
+   * Old Resolve rules redirected to blocked.html.
+   */
+  const isOldResolveRedirect =
     rule.action?.type === "redirect" &&
     rule.action.redirect?.extensionPath ===
       "/blocked.html";
 
   return (
     hasResolveId ||
-    isBlockedPageRedirect
+    isOldResolveRedirect
   );
 }
 
 /**
- * Remove all Resolve-owned dynamic rules.
+ * --------------------------------------------------------------------------
+ * Clear Resolve Rules
+ * --------------------------------------------------------------------------
  *
- * This does NOT blindly delete unrelated dynamic rules.
+ * Removes:
+ *
+ * - Current Resolve BLOCK rules
+ * - Old Resolve REDIRECT rules
+ *
+ * Does NOT remove unrelated extension rules.
  */
-export async function clearBlockingRules(): Promise<void> {
-  try {
-    if (!chrome.declarativeNetRequest) {
-      throw new Error(
-        "Declarative Net Request API is unavailable."
-      );
-    }
 
+export async function clearBlockingRules(): Promise<void> {
+  if (!chrome.declarativeNetRequest) {
+    throw new Error(
+      "Declarative Net Request API is unavailable."
+    );
+  }
+
+  try {
     const existingRules =
       await chrome.declarativeNetRequest.getDynamicRules();
 
     const resolveRules =
-      existingRules.filter(
-        isResolveRule
-      );
+      existingRules.filter(isResolveRule);
 
     if (resolveRules.length === 0) {
       console.log(
-        "🧹 No existing Resolve blocking rules to remove."
+        "🧹 No Resolve blocking rules to remove."
       );
 
       return;
@@ -101,14 +132,12 @@ export async function clearBlockingRules(): Promise<void> {
         (rule) => rule.id
       );
 
-    await chrome.declarativeNetRequest.updateDynamicRules(
-      {
-        removeRuleIds,
-      }
-    );
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds,
+    });
 
     console.log(
-      `🧹 Resolve removed ${removeRuleIds.length} old blocking rules.`
+      `🧹 Resolve removed ${removeRuleIds.length} old rules.`
     );
   } catch (error) {
     console.error(
@@ -121,95 +150,182 @@ export async function clearBlockingRules(): Promise<void> {
 }
 
 /**
- * Normalize a website/domain.
+ * --------------------------------------------------------------------------
+ * Normalize Domain
+ * --------------------------------------------------------------------------
  */
+
 function normalizeDomain(
-  site: string
+  value: string
 ): string {
-  return site
-    .trim()
-    .toLowerCase()
-    .replace(
+  if (!value) {
+    return "";
+  }
+
+  let domain =
+    value
+      .trim()
+      .toLowerCase();
+
+  if (!domain) {
+    return "";
+  }
+
+  /**
+   * Remove protocol.
+   *
+   * https://bet365.com
+   * http://bet365.com
+   */
+  domain =
+    domain.replace(
       /^https?:\/\//,
       ""
-    )
-    .replace(
+    );
+
+  /**
+   * Remove leading www.
+   */
+  domain =
+    domain.replace(
       /^www\./,
       ""
-    )
-    .replace(
-      /\/.*$/,
-      ""
-    )
-    .trim();
+    );
+
+  /**
+   * Remove everything after the hostname.
+   *
+   * example.com/path
+   * becomes:
+   *
+   * example.com
+   */
+  domain =
+    domain.split("/")[0];
+
+  /**
+   * Remove port.
+   *
+   * example.com:443
+   * becomes:
+   *
+   * example.com
+   */
+  domain =
+    domain.split(":")[0];
+
+  return domain.trim();
 }
 
 /**
- * Build and install Resolve dynamic blocking rules.
+ * --------------------------------------------------------------------------
+ * Apply Blocking Rules
+ * --------------------------------------------------------------------------
+ *
+ * Given:
+ *
+ * [
+ *   "bet365.com",
+ *   "betway.com",
+ *   "stake.com"
+ * ]
+ *
+ * Resolve installs:
+ *
+ * ||bet365.com^
+ * ||betway.com^
+ * ||stake.com^
+ *
+ * with:
+ *
+ * action.type = "block"
+ *
+ * and:
+ *
+ * resourceTypes = ["main_frame"]
  */
+
 export async function applyBlockingRules(
   sites: string[]
 ): Promise<void> {
-  try {
-    if (!chrome.declarativeNetRequest) {
-      throw new Error(
-        "Declarative Net Request API is unavailable."
-      );
-    }
+  if (!chrome.declarativeNetRequest) {
+    throw new Error(
+      "Declarative Net Request API is unavailable."
+    );
+  }
 
+  try {
     /**
-     * Normalize and deduplicate domains.
+     * ----------------------------------------------------------------------
+     * Normalize + deduplicate
+     * ----------------------------------------------------------------------
      */
+
     const uniqueSites = [
       ...new Set(
-        sites
+        (sites ?? [])
           .map(normalizeDomain)
           .filter(Boolean)
       ),
     ];
 
     /**
-     * Protect against excessive rule generation.
+     * ----------------------------------------------------------------------
+     * Respect Chrome dynamic rule limit
+     * ----------------------------------------------------------------------
      */
+
     const limitedSites =
       uniqueSites.slice(
         0,
         MAX_DYNAMIC_RULES
       );
 
+    console.log(
+      `🔎 Resolve received ${uniqueSites.length} unique domains.`
+    );
+
+    console.log(
+      `🔎 Resolve will install ${limitedSites.length} domains.`
+    );
+
     /**
-     * Get currently installed rules.
+     * ----------------------------------------------------------------------
+     * Find existing Resolve rules
+     * ----------------------------------------------------------------------
      *
-     * We remove only Resolve-owned rules.
+     * This includes the old redirect rules.
      */
+
     const existingRules =
       await chrome.declarativeNetRequest.getDynamicRules();
 
     const resolveRules =
-      existingRules.filter(
-        isResolveRule
-      );
+      existingRules.filter(isResolveRule);
 
     const removeRuleIds =
       resolveRules.map(
         (rule) => rule.id
       );
 
+    console.log(
+      `🧹 Resolve found ${removeRuleIds.length} existing Resolve rules.`
+    );
+
     /**
-     * No websites to block.
-     *
-     * Still remove the old Resolve rules.
+     * ----------------------------------------------------------------------
+     * Empty blocking list
+     * ----------------------------------------------------------------------
      */
+
     if (limitedSites.length === 0) {
       if (removeRuleIds.length > 0) {
-        await chrome.declarativeNetRequest.updateDynamicRules(
-          {
-            removeRuleIds,
-          }
-        );
+        await chrome.declarativeNetRequest.updateDynamicRules({
+          removeRuleIds,
+        });
 
         console.log(
-          `🧹 Resolve removed ${removeRuleIds.length} old blocking rules.`
+          `🧹 Resolve removed ${removeRuleIds.length} rules.`
         );
       }
 
@@ -221,31 +337,58 @@ export async function applyBlockingRules(
     }
 
     /**
-     * Build new rules using Resolve's dedicated
-     * ID range.
+     * ----------------------------------------------------------------------
+     * Build BLOCK rules
+     * ----------------------------------------------------------------------
      */
-    const rules: chrome.declarativeNetRequest.Rule[] =
+
+    const rules:
+      chrome.declarativeNetRequest.Rule[] =
       limitedSites.map(
         (domain, index) => ({
+          /**
+           * Dedicated Resolve ID.
+           */
           id:
             RESOLVE_RULE_ID_START +
             index,
 
+          /**
+           * Normal blocking priority.
+           */
           priority: 1,
 
+          /**
+           * IMPORTANT:
+           *
+           * Current Resolve uses BLOCK.
+           *
+           * It does NOT redirect to blocked.html.
+           */
           action: {
-            type: "redirect",
-
-            redirect: {
-              extensionPath:
-                "/blocked.html",
-            },
+            type: "block",
           },
 
           condition: {
+            /**
+             * Domain + subdomain matching.
+             *
+             * ||bet365.com^
+             *
+             * matches:
+             *
+             * bet365.com
+             * www.bet365.com
+             * live.bet365.com
+             * casino.bet365.com
+             */
             urlFilter:
               `||${domain}^`,
 
+            /**
+             * Only block actual top-level
+             * website navigation.
+             */
             resourceTypes: [
               "main_frame",
             ],
@@ -254,25 +397,29 @@ export async function applyBlockingRules(
       );
 
     /**
-     * Remove old Resolve rules and install the
-     * new rules in ONE operation.
+     * ----------------------------------------------------------------------
+     * Install rules atomically
+     * ----------------------------------------------------------------------
      *
-     * This prevents the duplicate-ID race/problem
-     * we encountered previously.
+     * Old Resolve rules are removed at the same time
+     * new rules are added.
+     *
+     * This is important when switching from:
+     *
+     * REDIRECT → BLOCK
      */
-    await chrome.declarativeNetRequest.updateDynamicRules(
-      {
-        removeRuleIds,
-        addRules: rules,
-      }
+
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds,
+      addRules: rules,
+    });
+
+    console.log(
+      `🛡️ Resolve installed ${rules.length} BLOCK rules.`
     );
 
     console.log(
-      `🛡️ Resolve installed ${rules.length} redirect rules.`
-    );
-
-    console.log(
-      "🌐 Resolve blocked websites:",
+      "🌐 Resolve blocked domains:",
       limitedSites
     );
   } catch (error) {
