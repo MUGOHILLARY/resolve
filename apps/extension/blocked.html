@@ -8,119 +8,279 @@
     content="width=device-width, initial-scale=1.0"
   />
 
+  <meta
+    name="description"
+    content="Resolve Recovery — pause, breathe, and choose your long-term goal."
+  />
+
   <title>Resolve Recovery</title>
 
-  <link rel="stylesheet" href="blocked.css" />
+  <link
+    rel="icon"
+    type="image/png"
+    href="icons/resolve-logo.png"
+  />
+
+  <link
+    rel="stylesheet"
+    href="blocked.css"
+  />
 </head>
 
 <body>
 
-  <div class="background"></div>
+  <!-- Background -->
+  <div class="background" aria-hidden="true"></div>
 
-  <main class="container">
+  <!-- Main Recovery Interstitial -->
+  <main
+    class="container"
+    role="main"
+    aria-labelledby="pageTitle"
+  >
 
-    <!-- Logo -->
-    <div class="logo">
-      <img
-        src="icons/resolve-logo.png"
-        alt="Resolve"
-        class="resolve-logo"
-      />
-    </div>
+    <!-- Resolve Logo -->
+    <header class="header">
 
-    <!-- Header -->
-    <h1>Resolve</h1>
+      <div class="logo">
+        <img
+          src="icons/resolve-logo.png"
+          alt="Resolve Recovery"
+          class="resolve-logo"
+        />
+      </div>
 
-    <h2>You chose recovery.</h2>
+      <p class="brand">
+        RESOLVE
+      </p>
 
-    <p class="subtitle">
-      This website has been blocked because it conflicts with your recovery goals.
-    </p>
+    </header>
 
-    <!-- Breathing -->
-    <section class="breathing">
 
-      <div id="circle"></div>
+    <!-- Blocked Website Message -->
+    <section class="message">
 
-      <p id="breathingText">
+      <p class="eyebrow">
+        🛡️ RECOVERY PROTECTED
+      </p>
+
+      <h1 id="pageTitle">
+        You chose recovery.
+      </h1>
+
+      <p class="subtitle">
+        This website has been blocked because it conflicts
+        with your recovery goals.
+      </p>
+
+      <p
+        id="blockedSite"
+        class="blocked-site"
+      >
+        Website blocked
+      </p>
+
+    </section>
+
+
+    <!-- Breathing Exercise -->
+    <section
+      class="breathing"
+      aria-labelledby="breathingTitle"
+    >
+
+      <h2 id="breathingTitle">
+        Take a moment.
+      </h2>
+
+      <p class="breathing-instruction">
+        Slow down. Breathe. Let the urge pass.
+      </p>
+
+      <div
+        id="circle"
+        class="breathing-circle"
+        aria-hidden="true"
+      ></div>
+
+      <p
+        id="breathingText"
+        class="breathing-text"
+        aria-live="polite"
+      >
         Breathe In
       </p>
 
     </section>
 
-    <!-- Statistics -->
-    <section class="stats">
 
-      <div class="card">
+    <!-- Recovery Statistics -->
+    <section
+      class="stats"
+      aria-label="Recovery statistics"
+    >
 
-        <span>🔥</span>
+      <!-- Recovery Days -->
+      <article class="card">
 
-        <h3 id="streak">0</h3>
+        <span
+          class="card-icon"
+          aria-hidden="true"
+        >
+          🔥
+        </span>
 
-        <p>Recovery Days</p>
+        <h3 id="streak">
+          0
+        </h3>
 
-      </div>
+        <p>
+          Recovery Days
+        </p>
 
-      <div class="card">
+      </article>
 
-        <span>💰</span>
 
-        <h3 id="money">KES 0</h3>
+      <!-- Money Saved -->
+      <article class="card">
 
-        <p>Money Saved</p>
+        <span
+          class="card-icon"
+          aria-hidden="true"
+        >
+          💰
+        </span>
 
-      </div>
+        <h3 id="money">
+          KES 0
+        </h3>
 
-      <div class="card">
+        <p>
+          Money Saved
+        </p>
 
-        <span>🛡️</span>
+      </article>
 
-        <h3 id="blocks">0</h3>
 
-        <p>Blocked Today</p>
+      <!-- Blocked Attempts -->
+      <article class="card">
 
-      </div>
+        <span
+          class="card-icon"
+          aria-hidden="true"
+        >
+          🛡️
+        </span>
+
+        <h3 id="blocks">
+          0
+        </h3>
+
+        <p>
+          Blocked Today
+        </p>
+
+      </article>
 
     </section>
+
 
     <!-- Motivational Quote -->
-    <blockquote id="quote">
-      One decision today changes tomorrow.
+    <blockquote
+      id="quote"
+      class="quote"
+    >
+      "One decision today changes tomorrow."
     </blockquote>
 
+
     <!-- Recovery Tip -->
-    <section class="tip">
+    <section
+      class="tip"
+      aria-labelledby="tipTitle"
+    >
 
-      <h3>Remember</h3>
+      <div class="tip-icon" aria-hidden="true">
+        💡
+      </div>
 
-      <p id="tipText">
-        Urges usually pass within a few minutes.
-        Pause, breathe, and choose your long-term goal
-        over a temporary impulse.
-      </p>
+      <div>
+
+        <h2 id="tipTitle">
+          Remember
+        </h2>
+
+        <p id="tipText">
+          Urges usually pass within a few minutes.
+          Pause, breathe, and choose your long-term goal
+          over a temporary impulse.
+        </p>
+
+      </div>
 
     </section>
 
-    <!-- Actions -->
-    <div class="buttons">
 
-      <button id="coach">
-        🤖 Talk to AI Coach
+    <!-- Recovery Actions -->
+    <section
+      class="buttons"
+      aria-label="Recovery actions"
+    >
+
+      <button
+        id="coach"
+        type="button"
+        class="primary-button"
+      >
+        <span aria-hidden="true">🤖</span>
+        Talk to AI Coach
       </button>
 
-      <button id="journal">
-        📝 Open Journal
+
+      <button
+        id="journal"
+        type="button"
+        class="secondary-button"
+      >
+        <span aria-hidden="true">📝</span>
+        Open Journal
       </button>
 
-      <button id="back">
-        🏠 Return to Safety
+
+      <button
+        id="back"
+        type="button"
+        class="secondary-button"
+      >
+        <span aria-hidden="true">🏠</span>
+        Return to Safety
       </button>
 
-    </div>
+    </section>
+
+
+    <!-- Footer -->
+    <footer class="footer">
+
+      <p>
+        Protected by
+        <strong>Resolve Recovery</strong>
+      </p>
+
+      <p class="footer-small">
+        Pause • Breathe • Choose
+      </p>
+
+    </footer>
 
   </main>
 
-  <script type="module" src="blocked.js"></script>
+
+  <!-- Resolve blocked-page functionality -->
+  <script
+    type="module"
+    src="blocked.js"
+  ></script>
 
 </body>
 </html>

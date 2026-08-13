@@ -1,97 +1,217 @@
-import { quotes } from "./quotes";
-import { startBreathingAnimation } from "./breathing";
-import { loadStats } from "./stats";
+/**
+ * Resolve Recovery — Blocked Page
+ *
+ * Responsibilities:
+ * - Read the blocked domain from ?site=
+ * - Display the blocked domain
+ * - Notify the background service worker
+ * - Run the breathing exercise
+ * - Display blocking statistics
+ * - Handle recovery actions
+ */
 
-const quoteElement =
-  document.getElementById("quote") as HTMLElement | null;
+document.addEventListener("DOMContentLoaded", async () => {
+  console.log("🛡️ Resolve blocked page loaded.");
 
-const coachButton =
-  document.getElementById("coach") as HTMLButtonElement | null;
+  /* ---------------------------------------------------------------------- */
+  /* Get blocked domain                                                     */
+  /* ---------------------------------------------------------------------- */
 
-const journalButton =
-  document.getElementById("journal") as HTMLButtonElement | null;
+  const params = new URLSearchParams(window.location.search);
 
-const backButton =
-  document.getElementById("back") as HTMLButtonElement | null;
+  const site =
+    params.get("site")?.trim() || "This website";
 
-/*
-|--------------------------------------------------------------------------
-| Breathing Animation
-|--------------------------------------------------------------------------
-*/
+  console.log("🚫 Blocked site:", site);
 
-startBreathingAnimation();
+  /* ---------------------------------------------------------------------- */
+  /* Display blocked domain                                                 */
+  /* ---------------------------------------------------------------------- */
 
-/*
-|--------------------------------------------------------------------------
-| Recovery Statistics
-|--------------------------------------------------------------------------
-*/
+  const blockedSiteElement =
+    document.getElementById("blockedSite");
 
-loadStats();
+  if (blockedSiteElement) {
+    blockedSiteElement.textContent =
+      `${site} is blocked`;
+  }
 
-/*
-|--------------------------------------------------------------------------
-| Recovery Quote
-|--------------------------------------------------------------------------
-*/
+  /* ---------------------------------------------------------------------- */
+  /* Notify background service worker                                       */
+  /* ---------------------------------------------------------------------- */
 
-function updateQuote() {
-  if (!quoteElement) return;
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "RESOLVE_BLOCKED_PAGE_OPENED",
+      domain: site,
+      timestamp: Date.now(),
+    });
 
-  const random =
-    quotes[Math.floor(Math.random() * quotes.length)];
+    console.log(
+      "📊 Resolve blocked-page event response:",
+      response
+    );
 
-  quoteElement.textContent = random;
-}
-
-updateQuote();
-
-// Change quote every 15 seconds
-setInterval(updateQuote, 15000);
-
-/*
-|--------------------------------------------------------------------------
-| Return To Safe Page
-|--------------------------------------------------------------------------
-*/
-
-backButton?.addEventListener("click", () => {
-  chrome.tabs.query(
-    {
-      active: true,
-      currentWindow: true,
-    },
-    (tabs) => {
-      if (!tabs[0]?.id) return;
-
-      chrome.tabs.update(tabs[0].id, {
-        url: "https://www.google.com",
-      });
+    /*
+     * If the background service worker returns statistics,
+     * display them immediately.
+     */
+    if (response?.success) {
+      updateStatistics(response);
     }
-  );
-});
+  } catch (error) {
+    console.warn(
+      "⚠️ Could not notify Resolve background:",
+      error
+    );
+  }
 
-/*
-|--------------------------------------------------------------------------
-| Open Resolve AI Coach
-|--------------------------------------------------------------------------
-*/
+  /* ---------------------------------------------------------------------- */
+  /* Breathing Exercise                                                     */
+  /* ---------------------------------------------------------------------- */
 
-coachButton?.addEventListener("click", () => {
-  chrome.tabs.create({
-    url: "http://localhost:5173/ai-coach",
+  const breathingText =
+    document.getElementById("breathingText");
+
+  const circle =
+    document.getElementById("circle");
+
+  if (breathingText && circle) {
+    let breathingIn = true;
+
+    const updateBreathing = () => {
+      if (breathingIn) {
+        breathingText.textContent = "Breathe In";
+
+        circle.classList.remove("breathe-out");
+        circle.classList.add("breathe-in");
+      } else {
+        breathingText.textContent = "Breathe Out";
+
+        circle.classList.remove("breathe-in");
+        circle.classList.add("breathe-out");
+      }
+
+      breathingIn = !breathingIn;
+    };
+
+    updateBreathing();
+
+    window.setInterval(
+      updateBreathing,
+      4000
+    );
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Return To Safety                                                       */
+  /* ---------------------------------------------------------------------- */
+
+  const backButton =
+    document.getElementById("back");
+
+  backButton?.addEventListener("click", () => {
+    /*
+     * Never use history.back().
+     *
+     * The previous page may be the blocked website.
+     */
+    window.location.href = "about:blank";
+  });
+
+  /* ---------------------------------------------------------------------- */
+  /* AI Coach                                                               */
+  /* ---------------------------------------------------------------------- */
+
+  const coachButton =
+    document.getElementById("coach");
+
+  coachButton?.addEventListener("click", () => {
+    chrome.tabs.create({
+      url:
+        "https://resolve-web-two.vercel.app/",
+    });
+  });
+
+  /* ---------------------------------------------------------------------- */
+  /* Journal                                                                */
+  /* ---------------------------------------------------------------------- */
+
+  const journalButton =
+    document.getElementById("journal");
+
+  journalButton?.addEventListener("click", () => {
+    chrome.tabs.create({
+      url:
+        "https://resolve-web-two.vercel.app/",
+    });
   });
 });
 
-/*
-|--------------------------------------------------------------------------
-| Open Resolve Journal
-|--------------------------------------------------------------------------
-*/
+/* ==========================================================================
+ * Statistics
+ * ========================================================================== */
 
-journalButton?.addEventListener("click", () => {
-  chrome.tabs.create({
-    url: "http://localhost:5173/recovery/journal",
-  });
-});
+/**
+ * Update statistics displayed on the blocked page.
+ *
+ * Supported response properties:
+ *
+ * {
+ *   blockedToday: number,
+ *   recoveryDays: number,
+ *   moneySaved: number
+ * }
+ */
+function updateStatistics(
+  data: {
+    blockedToday?: number;
+    recoveryDays?: number;
+    moneySaved?: number;
+  }
+): void {
+  const blocksElement =
+    document.getElementById("blocks");
+
+  const streakElement =
+    document.getElementById("streak");
+
+  const moneyElement =
+    document.getElementById("money");
+
+  /* ---------------------------------------------------------------------- */
+  /* Blocked Today                                                          */
+  /* ---------------------------------------------------------------------- */
+
+  if (blocksElement) {
+    const blockedToday =
+      Number(data.blockedToday ?? 0);
+
+    blocksElement.textContent =
+      String(blockedToday);
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Recovery Days                                                          */
+  /* ---------------------------------------------------------------------- */
+
+  if (streakElement) {
+    const recoveryDays =
+      Number(data.recoveryDays ?? 0);
+
+    streakElement.textContent =
+      String(recoveryDays);
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Money Saved                                                            */
+  /* ---------------------------------------------------------------------- */
+
+  if (moneyElement) {
+    const moneySaved =
+      Number(data.moneySaved ?? 0);
+
+    moneyElement.textContent =
+      `KES ${moneySaved.toLocaleString()}`;
+  }
+}

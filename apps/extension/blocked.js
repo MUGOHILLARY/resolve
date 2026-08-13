@@ -1,83 +1,85 @@
-// quotes.ts
-var quotes = [
-  "One decision today changes tomorrow.",
-  "Progress beats perfection.",
-  "Your future self will thank you.",
-  "Every urge resisted makes you stronger.",
-  "Recovery is built one choice at a time.",
-  "Freedom begins with one 'No'.",
-  "You've already won by stopping.",
-  "Small victories become lifelong habits."
-];
-
-// breathing.ts
-var phases = [
-  "Breathe In",
-  "Hold",
-  "Breathe Out",
-  "Hold"
-];
-function startBreathingAnimation() {
-  const text = document.getElementById("breathingText");
-  if (!text) return;
-  let index = 0;
-  text.textContent = phases[index];
-  setInterval(() => {
-    index = (index + 1) % phases.length;
-    text.textContent = phases[index];
-  }, 4e3);
-}
-
-// stats.ts
-var DEFAULT_STATS = {
-  streak: 0,
-  blockedToday: 0,
-  moneySaved: 0,
-  lastBlockedDate: ""
-};
-async function loadStats() {
-  const result = await chrome.storage.local.get("resolveStats");
-  const stats = result.resolveStats ?? DEFAULT_STATS;
-  document.getElementById("streak").textContent = stats.streak.toString();
-  document.getElementById("money").textContent = `KES ${stats.moneySaved.toLocaleString()}`;
-  document.getElementById("blocks").textContent = stats.blockedToday.toString();
-}
-
 // blocked.ts
-var quoteElement = document.getElementById("quote");
-var coachButton = document.getElementById("coach");
-var journalButton = document.getElementById("journal");
-var backButton = document.getElementById("back");
-startBreathingAnimation();
-loadStats();
-function updateQuote() {
-  if (!quoteElement) return;
-  const random = quotes[Math.floor(Math.random() * quotes.length)];
-  quoteElement.textContent = random;
-}
-updateQuote();
-setInterval(updateQuote, 15e3);
-backButton?.addEventListener("click", () => {
-  chrome.tabs.query(
-    {
-      active: true,
-      currentWindow: true
-    },
-    (tabs) => {
-      if (!tabs[0]?.id) return;
-      chrome.tabs.update(tabs[0].id, {
-        url: "https://www.google.com"
-      });
+document.addEventListener("DOMContentLoaded", async () => {
+  console.log("\u{1F6E1}\uFE0F Resolve blocked page loaded.");
+  const params = new URLSearchParams(window.location.search);
+  const site = params.get("site")?.trim() || "This website";
+  console.log("\u{1F6AB} Blocked site:", site);
+  const blockedSiteElement = document.getElementById("blockedSite");
+  if (blockedSiteElement) {
+    blockedSiteElement.textContent = `${site} is blocked`;
+  }
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "RESOLVE_BLOCKED_PAGE_OPENED",
+      domain: site,
+      timestamp: Date.now()
+    });
+    console.log(
+      "\u{1F4CA} Resolve blocked-page event response:",
+      response
+    );
+    if (response?.success) {
+      updateStatistics(response);
     }
-  );
-});
-coachButton?.addEventListener("click", () => {
-  chrome.tabs.create({
-    url: "http://localhost:5173/ai-coach"
+  } catch (error) {
+    console.warn(
+      "\u26A0\uFE0F Could not notify Resolve background:",
+      error
+    );
+  }
+  const breathingText = document.getElementById("breathingText");
+  const circle = document.getElementById("circle");
+  if (breathingText && circle) {
+    let breathingIn = true;
+    const updateBreathing = () => {
+      if (breathingIn) {
+        breathingText.textContent = "Breathe In";
+        circle.classList.remove("breathe-out");
+        circle.classList.add("breathe-in");
+      } else {
+        breathingText.textContent = "Breathe Out";
+        circle.classList.remove("breathe-in");
+        circle.classList.add("breathe-out");
+      }
+      breathingIn = !breathingIn;
+    };
+    updateBreathing();
+    window.setInterval(
+      updateBreathing,
+      4e3
+    );
+  }
+  const backButton = document.getElementById("back");
+  backButton?.addEventListener("click", () => {
+    window.location.href = "about:blank";
+  });
+  const coachButton = document.getElementById("coach");
+  coachButton?.addEventListener("click", () => {
+    chrome.tabs.create({
+      url: "https://resolve-web-two.vercel.app/"
+    });
+  });
+  const journalButton = document.getElementById("journal");
+  journalButton?.addEventListener("click", () => {
+    chrome.tabs.create({
+      url: "https://resolve-web-two.vercel.app/"
+    });
   });
 });
-journalButton?.addEventListener("click", () => {
-  chrome.tabs.create({
-    url: "http://localhost:5173/recovery/journal"
-  });
-});
+function updateStatistics(data) {
+  const blocksElement = document.getElementById("blocks");
+  const streakElement = document.getElementById("streak");
+  const moneyElement = document.getElementById("money");
+  if (blocksElement) {
+    const blockedToday = Number(data.blockedToday ?? 0);
+    blocksElement.textContent = String(blockedToday);
+  }
+  if (streakElement) {
+    const recoveryDays = Number(data.recoveryDays ?? 0);
+    streakElement.textContent = String(recoveryDays);
+  }
+  if (moneyElement) {
+    const moneySaved = Number(data.moneySaved ?? 0);
+    moneyElement.textContent = `KES ${moneySaved.toLocaleString()}`;
+  }
+}

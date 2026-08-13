@@ -253,9 +253,6 @@ function isResolveRule(rule) {
   return hasResolveId || isOldResolveRedirect;
 }
 function normalizeDomain2(value) {
-  if (!value) {
-    return "";
-  }
   let domain = value.trim().toLowerCase();
   if (!domain) {
     return "";
@@ -272,118 +269,104 @@ function normalizeDomain2(value) {
   domain = domain.split(":")[0];
   return domain.trim();
 }
+function buildBlockedPageUrl(domain) {
+  const blockedPage = chrome.runtime.getURL(
+    "blocked.html"
+  );
+  const query = new URLSearchParams({
+    site: domain
+  });
+  return `${blockedPage}?${query.toString()}`;
+}
 async function applyBlockingRules(sites) {
   if (!chrome.declarativeNetRequest) {
     throw new Error(
       "Declarative Net Request API is unavailable."
     );
   }
-  try {
-    const uniqueSites = [
-      ...new Set(
-        (sites ?? []).map(normalizeDomain2).filter(Boolean)
-      )
-    ];
-    const limitedSites = uniqueSites.slice(
-      0,
-      MAX_DYNAMIC_RULES
-    );
-    console.log(
-      `\u{1F50E} Resolve received ${uniqueSites.length} unique domains.`
-    );
-    console.log(
-      `\u{1F50E} Resolve will install ${limitedSites.length} domains.`
-    );
-    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-    const resolveRules = existingRules.filter(isResolveRule);
-    const removeRuleIds = resolveRules.map(
-      (rule) => rule.id
-    );
-    console.log(
-      `\u{1F9F9} Resolve found ${removeRuleIds.length} existing Resolve rules.`
-    );
-    if (limitedSites.length === 0) {
-      if (removeRuleIds.length > 0) {
-        await chrome.declarativeNetRequest.updateDynamicRules({
-          removeRuleIds
-        });
-        console.log(
-          `\u{1F9F9} Resolve removed ${removeRuleIds.length} rules.`
-        );
-      }
-      console.log(
-        "\u{1F6E1}\uFE0F Resolve blocking list is empty."
-      );
-      return;
+  const uniqueSites = [
+    ...new Set(
+      sites.map(normalizeDomain2).filter(Boolean)
+    )
+  ];
+  const limitedSites = uniqueSites.slice(
+    0,
+    MAX_DYNAMIC_RULES
+  );
+  const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
+  const resolveRules = existingRules.filter(
+    isResolveRule
+  );
+  const removeRuleIds = resolveRules.map(
+    (rule) => rule.id
+  );
+  if (limitedSites.length === 0) {
+    if (removeRuleIds.length > 0) {
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds
+      });
     }
-    const rules = limitedSites.map(
-      (domain, index) => ({
-        /**
-         * Dedicated Resolve ID.
-         */
-        id: RESOLVE_RULE_ID_START + index,
-        /**
-         * Normal blocking priority.
-         */
-        priority: 1,
-        /**
-         * IMPORTANT:
-         *
-         * Current Resolve uses BLOCK.
-         *
-         * It does NOT redirect to blocked.html.
-         */
-        action: {
-          type: "block"
-        },
-        condition: {
-          /**
-           * Domain + subdomain matching.
-           *
-           * ||bet365.com^
-           *
-           * matches:
-           *
-           * bet365.com
-           * www.bet365.com
-           * live.bet365.com
-           * casino.bet365.com
-           */
-          urlFilter: `||${domain}^`,
-          /**
-           * Only block actual top-level
-           * website navigation.
-           */
-          resourceTypes: [
-            "main_frame"
-          ]
-        }
-      })
-    );
-    await chrome.declarativeNetRequest.updateDynamicRules({
-      removeRuleIds,
-      addRules: rules
-    });
     console.log(
-      `\u{1F6E1}\uFE0F Resolve installed ${rules.length} BLOCK rules.`
+      "\u{1F6E1}\uFE0F Resolve blocking list is empty."
     );
-    console.log(
-      "\u{1F310} Resolve blocked domains:",
-      limitedSites
-    );
-  } catch (error) {
-    console.error(
-      "\u274C Resolve blocking rule installation failed:",
-      error
-    );
-    throw error;
+    return;
   }
+  const rules = limitedSites.map(
+    (domain, index) => ({
+      id: RESOLVE_RULE_ID_START + index,
+      /**
+       * Higher priority than ordinary
+       * allow rules inside Resolve.
+       */
+      priority: 10,
+      action: {
+        type: "redirect",
+        redirect: {
+          url: buildBlockedPageUrl(
+            domain
+          )
+        }
+      },
+      condition: {
+        /**
+         * Domain anchor.
+         *
+         * Matches:
+         *
+         * betika.com
+         * www.betika.com
+         * mobile.betika.com
+         * live.betika.com
+         */
+        urlFilter: `||${domain}^`,
+        resourceTypes: [
+          "main_frame"
+        ]
+      }
+    })
+  );
+  await chrome.declarativeNetRequest.updateDynamicRules({
+    removeRuleIds,
+    addRules: rules
+  });
+  console.log(
+    `\u{1F6E1}\uFE0F Resolve installed ${rules.length} REDIRECT rules.`
+  );
+  console.log(
+    "\u{1F310} Resolve blocked domains:",
+    limitedSites
+  );
 }
 
 // events/eventBus.ts
-var API_URL = "http://localhost:4000/api/events";
+var API_URL = "https://resolve-api-ty79.onrender.com/api/events";
 async function emitEvent(event) {
   try {
+    console.log(
+      "\u{1F4E1} Sending Resolve event:",
+      event.type,
+      event
+    );
     const response = await fetch(API_URL, {
       method: "POST",
       headers: {
@@ -393,17 +376,20 @@ async function emitEvent(event) {
     });
     if (!response.ok) {
       console.error(
-        "Resolve API returned:",
+        "\u274C Resolve event API returned:",
         response.status,
         response.statusText
       );
       return false;
     }
-    console.log("Resolve event sent:", event.type);
+    console.log(
+      "\u2705 Resolve event sent:",
+      event.type
+    );
     return true;
   } catch (error) {
     console.error(
-      "Unable to send Resolve event:",
+      "\u274C Unable to send Resolve event:",
       error
     );
     return false;
@@ -417,10 +403,22 @@ var DEFAULT_STATS = {
   moneySaved: 0,
   lastBlockedDate: ""
 };
+async function getStats() {
+  const result = await chrome.storage.local.get("resolveStats");
+  const storedStats = result.resolveStats;
+  if (!storedStats) {
+    return {
+      ...DEFAULT_STATS
+    };
+  }
+  return {
+    ...DEFAULT_STATS,
+    ...storedStats
+  };
+}
 async function recordBlockedAttempt() {
   const today = (/* @__PURE__ */ new Date()).toDateString();
-  const result = await chrome.storage.local.get("resolveStats");
-  const stats = result.resolveStats ?? DEFAULT_STATS;
+  const stats = await getStats();
   if (stats.lastBlockedDate !== today) {
     stats.blockedToday = 0;
     stats.lastBlockedDate = today;
@@ -430,6 +428,11 @@ async function recordBlockedAttempt() {
   await chrome.storage.local.set({
     resolveStats: stats
   });
+  console.log(
+    "\u{1F4CA} Resolve statistics updated:",
+    stats
+  );
+  return stats;
 }
 
 // services/syncService.ts
@@ -572,20 +575,28 @@ async function initialize() {
   }
   initializationPromise = (async () => {
     try {
-      console.log(
-        "\u{1F504} Resolve initialization started."
-      );
-      const syncedSettings = await syncSettingsFromResolve();
+      console.log("\u{1F504} Resolve initialization started.");
+      let syncedSettings = null;
+      try {
+        syncedSettings = await syncSettingsFromResolve();
+      } catch (error) {
+        console.warn(
+          "\u26A0\uFE0F Resolve settings synchronization failed. Using local settings.",
+          error
+        );
+      }
       const settings = syncedSettings ?? await getSettings();
       console.log(
         "\u2699\uFE0F Resolve settings:",
         settings
       );
-      blockedSites = buildWebsiteList(
-        settings
-      );
+      blockedSites = buildWebsiteList(settings);
       console.log(
         `\u{1F6E1}\uFE0F Resolve blocking ${blockedSites.length} domains.`
+      );
+      console.log(
+        "\u{1F310} Resolve blocked domains:",
+        blockedSites
       );
       await applyBlockingRules(
         blockedSites
@@ -633,7 +644,7 @@ chrome.storage.onChanged.addListener(
       return;
     }
     console.log(
-      "\u{1F504} Resolve storage changed."
+      "\u{1F504} Resolve storage changed. Reinitializing..."
     );
     await initialize();
   }
@@ -644,22 +655,14 @@ chrome.webNavigation.onBeforeNavigate.addListener(
       return;
     }
     try {
-      const url = new URL(
-        details.url
-      );
+      const url = new URL(details.url);
       if (url.protocol !== "http:" && url.protocol !== "https:") {
         return;
       }
-      const hostname = url.hostname.toLowerCase().replace(
-        /^www\./,
-        ""
-      );
+      const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
       const blocked = blockedSites.some(
         (site) => {
-          const normalizedSite = site.trim().toLowerCase().replace(
-            /^www\./,
-            ""
-          );
+          const normalizedSite = site.trim().toLowerCase().replace(/^www\./, "");
           return hostname === normalizedSite || hostname.endsWith(
             "." + normalizedSite
           );
@@ -673,6 +676,9 @@ chrome.webNavigation.onBeforeNavigate.addListener(
       );
       try {
         await recordBlockedAttempt();
+        console.log(
+          "\u{1F4CA} Resolve blocked attempt recorded."
+        );
       } catch (statsError) {
         console.error(
           "\u26A0\uFE0F Failed to record blocked attempt:",
@@ -699,6 +705,65 @@ chrome.webNavigation.onBeforeNavigate.addListener(
         error
       );
     }
+  }
+);
+chrome.runtime.onMessage.addListener(
+  (message, sender, sendResponse) => {
+    if (message?.type !== "RESOLVE_BLOCKED_PAGE_OPENED") {
+      return false;
+    }
+    (async () => {
+      try {
+        const domain = typeof message.domain === "string" ? message.domain.trim().toLowerCase() : "unknown";
+        console.log(
+          "\u{1F6E1}\uFE0F Resolve recovery page opened for:",
+          domain
+        );
+        const storage = await chrome.storage.local.get(
+          "resolveStats"
+        );
+        const stats = storage.resolveStats ?? {};
+        const blockedToday = Number(
+          stats.blockedToday ?? 0
+        );
+        const recoveryDays = Number(
+          stats.streak ?? 0
+        );
+        const moneySaved = Number(
+          stats.moneySaved ?? 0
+        );
+        console.log(
+          "\u{1F4CA} Resolve blocked-page statistics:",
+          {
+            success: true,
+            domain,
+            blockedToday,
+            recoveryDays,
+            moneySaved
+          }
+        );
+        sendResponse({
+          success: true,
+          domain,
+          blockedToday,
+          recoveryDays,
+          moneySaved
+        });
+      } catch (error) {
+        console.error(
+          "\u274C Blocked-page event error:",
+          error
+        );
+        sendResponse({
+          success: false,
+          domain: typeof message.domain === "string" ? message.domain : "unknown",
+          blockedToday: 0,
+          recoveryDays: 0,
+          moneySaved: 0
+        });
+      }
+    })();
+    return true;
   }
 );
 chrome.runtime.onMessageExternal.addListener(
@@ -766,9 +831,7 @@ chrome.runtime.onMessageExternal.addListener(
           );
           await clearResolveSession();
           blockedSites = [];
-          await applyBlockingRules(
-            []
-          );
+          await applyBlockingRules([]);
           console.log(
             "\u2705 Resolve account disconnected."
           );

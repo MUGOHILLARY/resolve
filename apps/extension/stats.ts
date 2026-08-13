@@ -1,4 +1,15 @@
-interface ResolveStats {
+/**
+ * Resolve Recovery Statistics
+ *
+ * Responsibilities:
+ * - Store blocking statistics
+ * - Track blocked attempts today
+ * - Track money saved
+ * - Track recovery streak
+ * - Provide statistics to the blocked recovery page
+ */
+
+export interface ResolveStats {
   streak: number;
   blockedToday: number;
   moneySaved: number;
@@ -12,44 +23,123 @@ const DEFAULT_STATS: ResolveStats = {
   lastBlockedDate: "",
 };
 
-export async function loadStats() {
-  const result = await chrome.storage.local.get("resolveStats");
+/* -------------------------------------------------------------------------- */
+/* Get Statistics                                                             */
+/* -------------------------------------------------------------------------- */
 
-  const stats: ResolveStats =
-    result.resolveStats ?? DEFAULT_STATS;
+export async function getStats(): Promise<ResolveStats> {
+  const result =
+    await chrome.storage.local.get("resolveStats");
 
-  (
-    document.getElementById("streak") as HTMLElement
-  ).textContent = stats.streak.toString();
+  const storedStats =
+    result.resolveStats;
 
-  (
-    document.getElementById("money") as HTMLElement
-  ).textContent = `KES ${stats.moneySaved.toLocaleString()}`;
+  if (!storedStats) {
+    return {
+      ...DEFAULT_STATS,
+    };
+  }
 
-  (
-    document.getElementById("blocks") as HTMLElement
-  ).textContent = stats.blockedToday.toString();
+  return {
+    ...DEFAULT_STATS,
+    ...storedStats,
+  };
 }
 
-export async function recordBlockedAttempt() {
-  const today = new Date().toDateString();
+/* -------------------------------------------------------------------------- */
+/* Load Statistics Into UI                                                    */
+/* -------------------------------------------------------------------------- */
 
-  const result = await chrome.storage.local.get("resolveStats");
+/**
+ * This function is intended for pages that contain:
+ *
+ * #streak
+ * #money
+ * #blocks
+ *
+ * It is not required by the background service worker.
+ */
+export async function loadStats(): Promise<void> {
+  const stats = await getStats();
 
-  const stats: ResolveStats =
-    result.resolveStats ?? DEFAULT_STATS;
+  const streakElement =
+    document.getElementById("streak");
 
-  if (stats.lastBlockedDate !== today) {
+  const moneyElement =
+    document.getElementById("money");
+
+  const blocksElement =
+    document.getElementById("blocks");
+
+  if (streakElement) {
+    streakElement.textContent =
+      stats.streak.toString();
+  }
+
+  if (moneyElement) {
+    moneyElement.textContent =
+      `KES ${stats.moneySaved.toLocaleString()}`;
+  }
+
+  if (blocksElement) {
+    blocksElement.textContent =
+      stats.blockedToday.toString();
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Record Blocked Attempt                                                     */
+/* -------------------------------------------------------------------------- */
+
+export async function recordBlockedAttempt(): Promise<ResolveStats> {
+  const today =
+    new Date().toDateString();
+
+  const stats =
+    await getStats();
+
+  /* ------------------------------------------------------------------------ */
+  /* Reset daily counter when a new day begins                               */
+  /* ------------------------------------------------------------------------ */
+
+  if (
+    stats.lastBlockedDate !== today
+  ) {
     stats.blockedToday = 0;
     stats.lastBlockedDate = today;
   }
 
+  /* ------------------------------------------------------------------------ */
+  /* Record blocked attempt                                                   */
+  /* ------------------------------------------------------------------------ */
+
   stats.blockedToday++;
 
-  // Approximate money saved per avoided gambling attempt
+  /* ------------------------------------------------------------------------ */
+  /* Money saved                                                              */
+  /* ------------------------------------------------------------------------ */
+
+  /**
+   * Approximate amount saved per avoided
+   * gambling attempt.
+   *
+   * This can later be replaced with a
+   * user-configurable amount.
+   */
   stats.moneySaved += 250;
+
+  /* ------------------------------------------------------------------------ */
+  /* Save                                                                     */
+  /* ------------------------------------------------------------------------ */
 
   await chrome.storage.local.set({
     resolveStats: stats,
   });
+
+  console.log(
+    "📊 Resolve statistics updated:",
+    stats
+  );
+
+  return stats;
 }
