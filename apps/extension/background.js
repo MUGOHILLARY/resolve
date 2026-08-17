@@ -399,39 +399,112 @@ async function emitEvent(event) {
 // stats.ts
 var DEFAULT_STATS = {
   streak: 0,
+  bestStreak: 0,
   blockedToday: 0,
+  moneySavedToday: 0,
+  totalBlocked: 0,
   moneySaved: 0,
-  lastBlockedDate: ""
+  lastBlockedDate: "",
+  lastRecoveryDate: "",
+  dailyHistory: []
 };
+var STORAGE_KEY = "resolveStats";
+var MONEY_SAVED_PER_BLOCK = 250;
+function getToday() {
+  return (/* @__PURE__ */ new Date()).toDateString();
+}
+function getYesterday() {
+  const date = /* @__PURE__ */ new Date();
+  date.setDate(
+    date.getDate() - 1
+  );
+  return date.toDateString();
+}
 async function getStats() {
-  const result = await chrome.storage.local.get("resolveStats");
-  const storedStats = result.resolveStats;
-  if (!storedStats) {
-    return {
-      ...DEFAULT_STATS
-    };
-  }
+  const result = await chrome.storage.local.get(
+    STORAGE_KEY
+  );
+  const stored = result[STORAGE_KEY];
   return {
     ...DEFAULT_STATS,
-    ...storedStats
+    ...stored,
+    dailyHistory: Array.isArray(
+      stored?.dailyHistory
+    ) ? stored.dailyHistory : []
   };
 }
+async function saveStats(stats) {
+  await chrome.storage.local.set({
+    [STORAGE_KEY]: stats
+  });
+}
+function ensureTodayRecord(stats, today) {
+  let record = stats.dailyHistory.find(
+    (item) => item.date === today
+  );
+  if (!record) {
+    record = {
+      date: today,
+      blocked: 0,
+      moneySaved: 0
+    };
+    stats.dailyHistory.push(
+      record
+    );
+  }
+  return record;
+}
 async function recordBlockedAttempt() {
-  const today = (/* @__PURE__ */ new Date()).toDateString();
+  const today = getToday();
+  const yesterday = getYesterday();
   const stats = await getStats();
   if (stats.lastBlockedDate !== today) {
     stats.blockedToday = 0;
-    stats.lastBlockedDate = today;
+    stats.moneySavedToday = 0;
   }
-  stats.blockedToday++;
-  stats.moneySaved += 250;
-  await chrome.storage.local.set({
-    resolveStats: stats
-  });
+  stats.blockedToday += 1;
+  stats.totalBlocked += 1;
+  stats.moneySavedToday += MONEY_SAVED_PER_BLOCK;
+  stats.moneySaved += MONEY_SAVED_PER_BLOCK;
+  stats.lastBlockedDate = today;
+  const todayRecord = ensureTodayRecord(
+    stats,
+    today
+  );
+  todayRecord.blocked += 1;
+  todayRecord.moneySaved += MONEY_SAVED_PER_BLOCK;
+  if (stats.lastRecoveryDate !== today) {
+    if (stats.lastRecoveryDate === yesterday) {
+      stats.streak += 1;
+    } else {
+      stats.streak = 1;
+    }
+    stats.bestStreak = Math.max(
+      stats.bestStreak,
+      stats.streak
+    );
+    stats.lastRecoveryDate = today;
+  }
+  stats.dailyHistory = stats.dailyHistory.sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  ).slice(0, 90);
+  await saveStats(stats);
   console.log(
-    "\u{1F4CA} Resolve statistics updated:",
+    "\u{1F4CA} Resolve premium statistics updated:",
     stats
   );
+  return stats;
+}
+async function getStatsSnapshot() {
+  const stats = await getStats();
+  const today = getToday();
+  if (stats.lastBlockedDate !== today) {
+    return {
+      ...stats,
+      blockedToday: 0,
+      moneySavedToday: 0
+    };
+  }
   return stats;
 }
 
@@ -575,7 +648,9 @@ async function initialize() {
   }
   initializationPromise = (async () => {
     try {
-      console.log("\u{1F504} Resolve initialization started.");
+      console.log(
+        "\u{1F504} Resolve initialization started."
+      );
       let syncedSettings = null;
       try {
         syncedSettings = await syncSettingsFromResolve();
@@ -675,9 +750,10 @@ chrome.webNavigation.onBeforeNavigate.addListener(
         `\u{1F6E1}\uFE0F Resolve blocked: ${hostname}`
       );
       try {
-        await recordBlockedAttempt();
+        const updatedStats = await recordBlockedAttempt();
         console.log(
-          "\u{1F4CA} Resolve blocked attempt recorded."
+          "\u{1F4CA} Resolve blocked attempt recorded:",
+          updatedStats
         );
       } catch (statsError) {
         console.error(
@@ -686,6 +762,13 @@ chrome.webNavigation.onBeforeNavigate.addListener(
         );
       }
       try {
+        console.log(
+          "\u{1F4E1} Sending Resolve event:",
+          "site_blocked",
+          {
+            domain: hostname
+          }
+        );
         await emitEvent({
           type: "site_blocked",
           payload: {
@@ -719,35 +802,35 @@ chrome.runtime.onMessage.addListener(
           "\u{1F6E1}\uFE0F Resolve recovery page opened for:",
           domain
         );
-        const storage = await chrome.storage.local.get(
-          "resolveStats"
-        );
-        const stats = storage.resolveStats ?? {};
-        const blockedToday = Number(
-          stats.blockedToday ?? 0
-        );
-        const recoveryDays = Number(
-          stats.streak ?? 0
-        );
-        const moneySaved = Number(
-          stats.moneySaved ?? 0
-        );
+        const stats = await getStatsSnapshot();
         console.log(
-          "\u{1F4CA} Resolve blocked-page statistics:",
+          "\u{1F4CA} Resolve blocked-page premium statistics:",
           {
             success: true,
             domain,
-            blockedToday,
-            recoveryDays,
-            moneySaved
+            streak: stats.streak,
+            bestStreak: stats.bestStreak,
+            blockedToday: stats.blockedToday,
+            totalBlocked: stats.totalBlocked,
+            moneySavedToday: stats.moneySavedToday,
+            moneySaved: stats.moneySaved,
+            lastBlockedDate: stats.lastBlockedDate,
+            lastRecoveryDate: stats.lastRecoveryDate,
+            dailyHistory: stats.dailyHistory
           }
         );
         sendResponse({
           success: true,
           domain,
-          blockedToday,
-          recoveryDays,
-          moneySaved
+          streak: stats.streak,
+          bestStreak: stats.bestStreak,
+          blockedToday: stats.blockedToday,
+          totalBlocked: stats.totalBlocked,
+          moneySavedToday: stats.moneySavedToday,
+          moneySaved: stats.moneySaved,
+          lastBlockedDate: stats.lastBlockedDate,
+          lastRecoveryDate: stats.lastRecoveryDate,
+          dailyHistory: stats.dailyHistory
         });
       } catch (error) {
         console.error(
@@ -757,9 +840,15 @@ chrome.runtime.onMessage.addListener(
         sendResponse({
           success: false,
           domain: typeof message.domain === "string" ? message.domain : "unknown",
+          streak: 0,
+          bestStreak: 0,
           blockedToday: 0,
-          recoveryDays: 0,
-          moneySaved: 0
+          totalBlocked: 0,
+          moneySavedToday: 0,
+          moneySaved: 0,
+          lastBlockedDate: "",
+          lastRecoveryDate: "",
+          dailyHistory: []
         });
       }
     })();
@@ -886,7 +975,7 @@ chrome.runtime.onMessageExternal.addListener(
     );
     sendResponse({
       success: false,
-      message: "Unknown Resolve message type."
+      message: "Unknown message type."
     });
     return false;
   }

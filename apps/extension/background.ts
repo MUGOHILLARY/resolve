@@ -2,7 +2,11 @@ import { getSettings } from "./storage/settings";
 import { buildWebsiteList } from "./rules/buildRules";
 import { applyBlockingRules } from "./background/blockerEngine";
 import { emitEvent } from "./events/eventBus";
-import { recordBlockedAttempt } from "./stats";
+
+import {
+  recordBlockedAttempt,
+  getStatsSnapshot,
+} from "./stats";
 
 import {
   syncSettingsFromResolve,
@@ -34,7 +38,9 @@ async function initialize(): Promise<void> {
 
   initializationPromise = (async () => {
     try {
-      console.log("🔄 Resolve initialization started.");
+      console.log(
+        "🔄 Resolve initialization started."
+      );
 
       /* -------------------------------------------------------------------- */
       /* Synchronize Resolve settings                                         */
@@ -57,7 +63,8 @@ async function initialize(): Promise<void> {
       /* -------------------------------------------------------------------- */
 
       const settings =
-        syncedSettings ?? (await getSettings());
+        syncedSettings ??
+        (await getSettings());
 
       console.log(
         "⚙️ Resolve settings:",
@@ -250,10 +257,12 @@ chrome.webNavigation.onBeforeNavigate.addListener(
       /* -------------------------------------------------------------------- */
 
       try {
-        await recordBlockedAttempt();
+        const updatedStats =
+          await recordBlockedAttempt();
 
         console.log(
-          "📊 Resolve blocked attempt recorded."
+          "📊 Resolve blocked attempt recorded:",
+          updatedStats
         );
       } catch (statsError) {
         console.error(
@@ -267,6 +276,14 @@ chrome.webNavigation.onBeforeNavigate.addListener(
       /* -------------------------------------------------------------------- */
 
       try {
+        console.log(
+          "📡 Sending Resolve event:",
+          "site_blocked",
+          {
+            domain: hostname,
+          }
+        );
+
         await emitEvent({
           type: "site_blocked",
 
@@ -302,7 +319,7 @@ chrome.webNavigation.onBeforeNavigate.addListener(
  * We use this to:
  *
  * 1. Confirm the Resolve recovery page opened.
- * 2. Read the current blocking statistics.
+ * 2. Read the premium blocking statistics.
  * 3. Return statistics to blocked.ts.
  *
  * IMPORTANT:
@@ -345,59 +362,49 @@ chrome.runtime.onMessage.addListener(
         );
 
         /* ------------------------------------------------------------------ */
-        /* Read Resolve statistics                                            */
+        /* Get premium statistics                                             */
         /* ------------------------------------------------------------------ */
-
-        /**
-         * IMPORTANT:
-         *
-         * stats.ts stores statistics under:
-         *
-         * resolveStats
-         *
-         * Therefore the blocked page must read
-         * the SAME storage object.
-         */
-        const storage =
-          await chrome.storage.local.get(
-            "resolveStats"
-          );
 
         const stats =
-          storage.resolveStats ?? {};
-
-        /* ------------------------------------------------------------------ */
-        /* Extract statistics                                                 */
-        /* ------------------------------------------------------------------ */
-
-        const blockedToday =
-          Number(
-            stats.blockedToday ?? 0
-          );
-
-        const recoveryDays =
-          Number(
-            stats.streak ?? 0
-          );
-
-        const moneySaved =
-          Number(
-            stats.moneySaved ?? 0
-          );
+          await getStatsSnapshot();
 
         console.log(
-          "📊 Resolve blocked-page statistics:",
+          "📊 Resolve blocked-page premium statistics:",
           {
             success: true,
             domain,
-            blockedToday,
-            recoveryDays,
-            moneySaved,
+
+            streak:
+              stats.streak,
+
+            bestStreak:
+              stats.bestStreak,
+
+            blockedToday:
+              stats.blockedToday,
+
+            totalBlocked:
+              stats.totalBlocked,
+
+            moneySavedToday:
+              stats.moneySavedToday,
+
+            moneySaved:
+              stats.moneySaved,
+
+            lastBlockedDate:
+              stats.lastBlockedDate,
+
+            lastRecoveryDate:
+              stats.lastRecoveryDate,
+
+            dailyHistory:
+              stats.dailyHistory,
           }
         );
 
         /* ------------------------------------------------------------------ */
-        /* Return statistics to blocked.ts                                    */
+        /* Return premium statistics to blocked.ts                           */
         /* ------------------------------------------------------------------ */
 
         sendResponse({
@@ -405,11 +412,32 @@ chrome.runtime.onMessage.addListener(
 
           domain,
 
-          blockedToday,
+          streak:
+            stats.streak,
 
-          recoveryDays,
+          bestStreak:
+            stats.bestStreak,
 
-          moneySaved,
+          blockedToday:
+            stats.blockedToday,
+
+          totalBlocked:
+            stats.totalBlocked,
+
+          moneySavedToday:
+            stats.moneySavedToday,
+
+          moneySaved:
+            stats.moneySaved,
+
+          lastBlockedDate:
+            stats.lastBlockedDate,
+
+          lastRecoveryDate:
+            stats.lastRecoveryDate,
+
+          dailyHistory:
+            stats.dailyHistory,
         });
       } catch (error) {
         console.error(
@@ -426,11 +454,23 @@ chrome.runtime.onMessage.addListener(
               ? message.domain
               : "unknown",
 
+          streak: 0,
+
+          bestStreak: 0,
+
           blockedToday: 0,
 
-          recoveryDays: 0,
+          totalBlocked: 0,
+
+          moneySavedToday: 0,
 
           moneySaved: 0,
+
+          lastBlockedDate: "",
+
+          lastRecoveryDate: "",
+
+          dailyHistory: [],
         });
       }
     })();
@@ -691,7 +731,7 @@ chrome.runtime.onMessageExternal.addListener(
       success: false,
 
       message:
-        "Unknown Resolve message type.",
+        "Unknown message type.",
     });
 
     return false;
