@@ -6,6 +6,10 @@ import compression from "compression";
 import { env } from "./config/env.js";
 import requestLogger from "./middleware/requestLogger.js";
 
+import {
+  handlePaystackWebhook,
+} from "./controllers/paystackWebhookController.js";
+
 import healthRoutes from "./routes/healthRoutes.js";
 import journalRoutes from "./routes/journalRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
@@ -52,7 +56,7 @@ console.log(allowedWebOrigins);
 /*
  * Chrome/Edge extension origins look like:
  *
- * extensions://xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+ * chrome-extension://xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
  *
  * We cannot use a normal HTTPS origin list for these.
  * The extension communicates with the API using Authorization headers,
@@ -61,7 +65,9 @@ console.log(allowedWebOrigins);
 function isExtensionOrigin(
   origin: string
 ): boolean {
-  return origin.startsWith("chrome-extension://");
+  return origin.startsWith(
+    "chrome-extension://"
+  );
 }
 
 const corsOptions: cors.CorsOptions = {
@@ -146,12 +152,41 @@ const corsOptions: cors.CorsOptions = {
 app.use(cors(corsOptions));
 
 /* -------------------------------------------------------------------------- */
-/* Security / Compression / Body Parsing                                     */
+/* Security / Compression                                                    */
 /* -------------------------------------------------------------------------- */
 
 app.use(helmet());
 
 app.use(compression());
+
+/* -------------------------------------------------------------------------- */
+/* Paystack Webhook                                                           */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * IMPORTANT:
+ *
+ * This route MUST appear BEFORE express.json().
+ *
+ * Paystack signs the original/raw request body.
+ * If express.json() parses the body first, the original
+ * Buffer is no longer available to the webhook controller.
+ *
+ * Paystack webhook:
+ *
+ * POST /api/subscription/paystack/webhook
+ */
+app.post(
+  "/api/subscription/paystack/webhook",
+  express.raw({
+    type: "application/json",
+  }),
+  handlePaystackWebhook
+);
+
+/* -------------------------------------------------------------------------- */
+/* Normal JSON Body Parsing                                                   */
+/* -------------------------------------------------------------------------- */
 
 app.use(
   express.json({
@@ -231,7 +266,8 @@ app.use(
 /*
  * Premium Subscription
  *
- * /api/subscription
+ * GET  /api/subscription
+ * POST /api/subscription/checkout
  */
 app.use(
   "/api/subscription",
@@ -339,6 +375,10 @@ const server = app.listen(
 
     console.log(
       "💎 Premium     : /api/subscription"
+    );
+
+    console.log(
+      "💳 Paystack    : /api/subscription/paystack/webhook"
     );
 
     console.log(

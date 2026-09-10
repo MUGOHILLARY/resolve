@@ -3,7 +3,11 @@ import {
   Clock3,
   Target,
   Shield,
+  Check,
+  Crown,
 } from "lucide-react";
+
+import { useState } from "react";
 
 import WelcomeBanner from "../components/dashboard/WelcomeBanner";
 import InsightCard from "../components/dashboard/InsightCard";
@@ -17,6 +21,8 @@ import { useStreakStore } from "../store/streakStore";
 
 import { useSubscription } from "../hooks/useSubscription";
 import PremiumGate from "../components/premium/PremiumGate";
+
+import { startPaystackCheckout } from "../services/subscriptionService";
 
 export default function Dashboard() {
   const streak = useStreakStore(
@@ -40,7 +46,43 @@ export default function Dashboard() {
     isPremium,
     loading: subscriptionLoading,
     error: subscriptionError,
+    refreshSubscription,
   } = useSubscription();
+
+  /*
+   * ------------------------------------------------------------------
+   * Paystack Checkout
+   * ------------------------------------------------------------------
+   */
+
+  const [checkoutPlan, setCheckoutPlan] =
+    useState<"monthly" | "yearly" | null>(null);
+
+  const [checkoutError, setCheckoutError] =
+    useState<string | null>(null);
+
+  async function handleCheckout(
+    plan: "monthly" | "yearly"
+  ) {
+    try {
+      setCheckoutError(null);
+      setCheckoutPlan(plan);
+
+      await startPaystackCheckout(plan);
+    } catch (error: any) {
+      console.error(
+        "❌ Resolve Premium checkout failed:",
+        error
+      );
+
+      setCheckoutError(
+        error?.message ??
+          "Unable to start Premium checkout. Please try again."
+      );
+
+      setCheckoutPlan(null);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -57,15 +99,24 @@ export default function Dashboard() {
 
       <section className="rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-sm">
 
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-5 flex items-center justify-between">
 
           <div>
-            <h2 className="text-lg font-semibold text-white">
-              Resolve Membership
-            </h2>
+            <div className="flex items-center gap-2">
+
+              <Crown
+                size={20}
+                className="text-amber-400"
+              />
+
+              <h2 className="text-lg font-semibold text-white">
+                Resolve Membership
+              </h2>
+
+            </div>
 
             <p className="mt-1 text-sm text-slate-400">
-              Live subscription status from the Resolve API
+              Your Resolve Premium membership and subscription status.
             </p>
           </div>
 
@@ -78,21 +129,33 @@ export default function Dashboard() {
                     : "bg-slate-700 text-slate-300"
                 }`}
               >
-                {isPremium ? "PREMIUM" : "FREE"}
+                {isPremium
+                  ? "PREMIUM"
+                  : "FREE"}
               </span>
             )}
 
         </div>
 
+        {/* -------------------------------------------------------------- */}
+        {/* Loading                                                        */}
+        {/* -------------------------------------------------------------- */}
+
         {subscriptionLoading ? (
 
           <div className="rounded-xl bg-slate-800 p-4">
+
             <p className="text-sm text-slate-400">
               Checking your subscription...
             </p>
+
           </div>
 
         ) : subscriptionError ? (
+
+          /* ------------------------------------------------------------ */
+          /* Subscription Error                                           */
+          /* ------------------------------------------------------------ */
 
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4">
 
@@ -104,63 +167,340 @@ export default function Dashboard() {
               {subscriptionError}
             </p>
 
+            <button
+              type="button"
+              onClick={refreshSubscription}
+              className="mt-3 rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-600"
+            >
+              Try Again
+            </button>
+
           </div>
 
         ) : (
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <>
+            {/* -------------------------------------------------------- */}
+            {/* Current Subscription                                      */}
+            {/* -------------------------------------------------------- */}
 
-            {/* Plan */}
+            <div className="grid gap-4 sm:grid-cols-3">
 
-            <div className="rounded-xl bg-slate-800 p-4">
+              {/* Plan */}
 
-              <p className="text-xs uppercase tracking-wide text-slate-500">
-                Plan
-              </p>
+              <div className="rounded-xl bg-slate-800 p-4">
 
-              <p className="mt-2 text-xl font-semibold capitalize text-white">
-                {subscription?.plan ?? "Unknown"}
-              </p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">
+                  Plan
+                </p>
+
+                <p className="mt-2 text-xl font-semibold capitalize text-white">
+                  {subscription?.plan ??
+                    "Unknown"}
+                </p>
+
+              </div>
+
+              {/* Status */}
+
+              <div className="rounded-xl bg-slate-800 p-4">
+
+                <p className="text-xs uppercase tracking-wide text-slate-500">
+                  Status
+                </p>
+
+                <p className="mt-2 text-xl font-semibold capitalize text-white">
+                  {subscription?.status ??
+                    "Unknown"}
+                </p>
+
+              </div>
+
+              {/* Premium Access */}
+
+              <div className="rounded-xl bg-slate-800 p-4">
+
+                <p className="text-xs uppercase tracking-wide text-slate-500">
+                  Premium Access
+                </p>
+
+                <p
+                  className={`mt-2 text-xl font-semibold ${
+                    isPremium
+                      ? "text-emerald-400"
+                      : "text-slate-300"
+                  }`}
+                >
+                  {isPremium
+                    ? "Enabled"
+                    : "Not Enabled"}
+                </p>
+
+              </div>
 
             </div>
 
-            {/* Status */}
+            {/* -------------------------------------------------------- */}
+            {/* Premium Member                                            */}
+            {/* -------------------------------------------------------- */}
 
-            <div className="rounded-xl bg-slate-800 p-4">
+            {isPremium ? (
 
-              <p className="text-xs uppercase tracking-wide text-slate-500">
-                Status
-              </p>
+              <div className="mt-5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-5">
 
-              <p className="mt-2 text-xl font-semibold capitalize text-white">
-                {subscription?.status ?? "Unknown"}
-              </p>
+                <div className="flex items-start gap-4">
 
-            </div>
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20">
 
-            {/* Premium Access */}
+                    <Crown
+                      size={22}
+                      className="text-emerald-400"
+                    />
 
-            <div className="rounded-xl bg-slate-800 p-4">
+                  </div>
 
-              <p className="text-xs uppercase tracking-wide text-slate-500">
-                Premium Access
-              </p>
+                  <div>
 
-              <p
-                className={`mt-2 text-xl font-semibold ${
-                  isPremium
-                    ? "text-emerald-400"
-                    : "text-slate-300"
-                }`}
-              >
-                {isPremium
-                  ? "Enabled"
-                  : "Not Enabled"}
-              </p>
+                    <h3 className="font-semibold text-emerald-400">
+                      Resolve Premium is active
+                    </h3>
 
-            </div>
+                    <p className="mt-1 text-sm text-emerald-300/80">
+                      You have full access to your Premium features.
+                    </p>
 
-          </div>
+                    {subscription?.current_period_end && (
+                      <p className="mt-2 text-xs text-emerald-300/60">
+                        Current period ends{" "}
+                        {new Date(
+                          subscription.current_period_end
+                        ).toLocaleDateString()}
+                      </p>
+                    )}
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            ) : (
+
+              /* ------------------------------------------------------ */
+              /* Premium Pricing                                         */
+              /* ------------------------------------------------------ */
+
+              <div className="mt-6">
+
+                <div className="mb-5">
+
+                  <h3 className="text-xl font-bold text-white">
+                    Upgrade to Resolve Premium
+                  </h3>
+
+                  <p className="mt-1 text-sm text-slate-400">
+                    Unlock the full Resolve recovery experience.
+                  </p>
+
+                </div>
+
+                {/* Checkout Error */}
+
+                {checkoutError && (
+
+                  <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+
+                    <p className="text-sm font-medium text-red-400">
+                      Payment could not be started
+                    </p>
+
+                    <p className="mt-1 text-sm text-red-300/80">
+                      {checkoutError}
+                    </p>
+
+                  </div>
+
+                )}
+
+                <div className="grid gap-5 md:grid-cols-2">
+
+                  {/* -------------------------------------------------- */}
+                  {/* Monthly Plan                                        */}
+                  {/* -------------------------------------------------- */}
+
+                  <div className="relative rounded-2xl border border-slate-700 bg-slate-800 p-6">
+
+                    <div className="mb-5">
+
+                      <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+                        Monthly
+                      </p>
+
+                      <div className="mt-2 flex items-end gap-1">
+
+                        <span className="text-4xl font-bold text-white">
+                          $6.99
+                        </span>
+
+                        <span className="mb-1 text-sm text-slate-400">
+                          / month
+                        </span>
+
+                      </div>
+
+                    </div>
+
+                    <div className="space-y-3">
+
+                      <div className="flex items-center gap-2 text-sm text-slate-300">
+                        <Check
+                          size={17}
+                          className="text-emerald-400"
+                        />
+                        Full Premium access
+                      </div>
+
+                      <div className="flex items-center gap-2 text-sm text-slate-300">
+                        <Check
+                          size={17}
+                          className="text-emerald-400"
+                        />
+                        Advanced recovery insights
+                      </div>
+
+                      <div className="flex items-center gap-2 text-sm text-slate-300">
+                        <Check
+                          size={17}
+                          className="text-emerald-400"
+                        />
+                        Premium statistics
+                      </div>
+
+                      <div className="flex items-center gap-2 text-sm text-slate-300">
+                        <Check
+                          size={17}
+                          className="text-emerald-400"
+                        />
+                        AI Coach access
+                      </div>
+
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={
+                        checkoutPlan !== null
+                      }
+                      onClick={() =>
+                        handleCheckout("monthly")
+                      }
+                      className="mt-6 w-full rounded-xl bg-emerald-500 px-5 py-3 font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {checkoutPlan ===
+                      "monthly"
+                        ? "Opening Paystack..."
+                        : "Choose Monthly"}
+                    </button>
+
+                  </div>
+
+                  {/* -------------------------------------------------- */}
+                  {/* Yearly Plan                                         */}
+                  {/* -------------------------------------------------- */}
+
+                  <div className="relative rounded-2xl border border-emerald-500/50 bg-slate-800 p-6">
+
+                    {/* Best Value */}
+
+                    <div className="absolute right-4 top-4 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-400">
+                      BEST VALUE
+                    </div>
+
+                    <div className="mb-5 pr-24">
+
+                      <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+                        Yearly
+                      </p>
+
+                      <div className="mt-2 flex items-end gap-1">
+
+                        <span className="text-4xl font-bold text-white">
+                          $72.99
+                        </span>
+
+                        <span className="mb-1 text-sm text-slate-400">
+                          / year
+                        </span>
+
+                      </div>
+
+                    </div>
+
+                    <div className="space-y-3">
+
+                      <div className="flex items-center gap-2 text-sm text-slate-300">
+                        <Check
+                          size={17}
+                          className="text-emerald-400"
+                        />
+                        Full Premium access
+                      </div>
+
+                      <div className="flex items-center gap-2 text-sm text-slate-300">
+                        <Check
+                          size={17}
+                          className="text-emerald-400"
+                        />
+                        Advanced recovery insights
+                      </div>
+
+                      <div className="flex items-center gap-2 text-sm text-slate-300">
+                        <Check
+                          size={17}
+                          className="text-emerald-400"
+                        />
+                        Premium statistics
+                      </div>
+
+                      <div className="flex items-center gap-2 text-sm text-slate-300">
+                        <Check
+                          size={17}
+                          className="text-emerald-400"
+                        />
+                        AI Coach access
+                      </div>
+
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={
+                        checkoutPlan !== null
+                      }
+                      onClick={() =>
+                        handleCheckout("yearly")
+                      }
+                      className="mt-6 w-full rounded-xl bg-emerald-500 px-5 py-3 font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {checkoutPlan ===
+                      "yearly"
+                        ? "Opening Paystack..."
+                        : "Choose Yearly"}
+                    </button>
+
+                  </div>
+
+                </div>
+
+                <p className="mt-4 text-center text-xs text-slate-500">
+                  Secure checkout powered by Paystack.
+                </p>
+
+              </div>
+            )}
+
+          </>
+
         )}
 
       </section>
@@ -176,13 +516,16 @@ export default function Dashboard() {
           <div className="flex items-center gap-4">
 
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/20">
+
               <Shield
                 size={24}
                 className="text-emerald-400"
               />
+
             </div>
 
             <div>
+
               <h2 className="text-lg font-semibold text-emerald-400">
                 Premium Feature Unlocked
               </h2>
@@ -190,6 +533,7 @@ export default function Dashboard() {
               <p className="mt-1 text-sm text-emerald-300/80">
                 You have access to this Premium feature.
               </p>
+
             </div>
 
           </div>

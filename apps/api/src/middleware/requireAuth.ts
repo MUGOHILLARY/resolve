@@ -10,6 +10,7 @@ declare global {
   namespace Express {
     interface Request {
       userId?: string;
+      userEmail?: string;
     }
   }
 }
@@ -63,7 +64,8 @@ export async function requireAuth(
   next: NextFunction
 ) {
   try {
-    const authHeader = req.headers.authorization;
+    const authHeader =
+      req.headers.authorization;
 
     /*
      * ---------------------------------------------------------------
@@ -160,10 +162,16 @@ export async function requireAuth(
     /*
      * ---------------------------------------------------------------
      * SUCCESS
+     *
+     * Store the authenticated user's ID and email on the
+     * Express request object.
+     *
+     * userEmail is used by the Paystack checkout endpoint.
      * ---------------------------------------------------------------
      */
 
     req.userId = user.id;
+    req.userEmail = user.email ?? undefined;
 
     console.log(
       "✅ Authenticated Resolve user:",

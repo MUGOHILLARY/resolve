@@ -94,7 +94,8 @@ export async function ensureSubscription(
   |--------------------------------------------------------------------------
   */
 
-  const existing = await getSubscription(userId);
+  const existing =
+    await getSubscription(userId);
 
   if (existing) {
     return existing;
@@ -106,21 +107,22 @@ export async function ensureSubscription(
   |--------------------------------------------------------------------------
   */
 
-  const { data, error } = await supabase
-    .from("subscriptions")
-    .insert({
-      user_id: userId,
-      provider: "manual",
-      plan: "free",
-      status: "active",
-      provider_customer_id: null,
-      provider_subscription_id: null,
-      current_period_start: null,
-      current_period_end: null,
-      cancel_at_period_end: false,
-    })
-    .select("*")
-    .single();
+  const { data, error } =
+    await supabase
+      .from("subscriptions")
+      .insert({
+        user_id: userId,
+        provider: "manual",
+        plan: "free",
+        status: "active",
+        provider_customer_id: null,
+        provider_subscription_id: null,
+        current_period_start: null,
+        current_period_end: null,
+        cancel_at_period_end: false,
+      })
+      .select("*")
+      .single();
 
   if (error) {
     /*
@@ -130,8 +132,6 @@ export async function ensureSubscription(
     |
     | Another request may have created the subscription between
     | getSubscription() and insert().
-    |
-    | In that case, retrieve the existing record.
     |
     |--------------------------------------------------------------------------
     */
@@ -184,7 +184,10 @@ export async function isPremium(
   |--------------------------------------------------------------------------
   */
 
-  if (subscription.plan !== "premium") {
+  if (
+    subscription.plan !==
+    "premium"
+  ) {
     return false;
   }
 
@@ -195,8 +198,10 @@ export async function isPremium(
   */
 
   const validStatus =
-    subscription.status === "active" ||
-    subscription.status === "trialing";
+    subscription.status ===
+      "active" ||
+    subscription.status ===
+      "trialing";
 
   if (!validStatus) {
     return false;
@@ -208,10 +213,13 @@ export async function isPremium(
   |--------------------------------------------------------------------------
   */
 
-  if (subscription.current_period_end) {
-    const expiresAt = new Date(
-      subscription.current_period_end
-    ).getTime();
+  if (
+    subscription.current_period_end
+  ) {
+    const expiresAt =
+      new Date(
+        subscription.current_period_end
+      ).getTime();
 
     if (
       Number.isFinite(expiresAt) &&
@@ -229,10 +237,10 @@ export async function isPremium(
 | UPDATE SUBSCRIPTION
 |--------------------------------------------------------------------------
 |
-| This will later be used by the payment webhook.
+| This is used by the Paystack webhook.
 |
-| The browser must NEVER directly modify its
-| subscription.
+| The browser must NEVER directly modify
+| its subscription.
 |
 |--------------------------------------------------------------------------
 */
@@ -253,12 +261,13 @@ export async function updateSubscription(
     >
   >
 ): Promise<Subscription> {
-  const { data, error } = await supabase
-    .from("subscriptions")
-    .update(updates)
-    .eq("user_id", userId)
-    .select("*")
-    .single();
+  const { data, error } =
+    await supabase
+      .from("subscriptions")
+      .update(updates)
+      .eq("user_id", userId)
+      .select("*")
+      .single();
 
   if (error) {
     console.error(
@@ -270,4 +279,84 @@ export async function updateSubscription(
   }
 
   return data as Subscription;
+}
+
+/*
+|--------------------------------------------------------------------------
+| FIND SUBSCRIPTION BY PAYSTACK CUSTOMER
+|--------------------------------------------------------------------------
+|
+| Used to identify the Resolve user associated with
+| a Paystack customer during recurring billing events.
+|
+|--------------------------------------------------------------------------
+*/
+
+export async function getSubscriptionByProviderCustomerId(
+  providerCustomerId: string
+): Promise<Subscription | null> {
+  const { data, error } =
+    await supabase
+      .from("subscriptions")
+      .select("*")
+      .eq(
+        "provider",
+        "paystack"
+      )
+      .eq(
+        "provider_customer_id",
+        providerCustomerId
+      )
+      .maybeSingle();
+
+  if (error) {
+    console.error(
+      "❌ Failed to find subscription by Paystack customer:",
+      error
+    );
+
+    throw error;
+  }
+
+  return data as Subscription | null;
+}
+
+/*
+|--------------------------------------------------------------------------
+| FIND SUBSCRIPTION BY PAYSTACK SUBSCRIPTION
+|--------------------------------------------------------------------------
+|
+| Used to identify the Resolve user associated with
+| a Paystack subscription during recurring billing events.
+|
+|--------------------------------------------------------------------------
+*/
+
+export async function getSubscriptionByProviderSubscriptionId(
+  providerSubscriptionId: string
+): Promise<Subscription | null> {
+  const { data, error } =
+    await supabase
+      .from("subscriptions")
+      .select("*")
+      .eq(
+        "provider",
+        "paystack"
+      )
+      .eq(
+        "provider_subscription_id",
+        providerSubscriptionId
+      )
+      .maybeSingle();
+
+  if (error) {
+    console.error(
+      "❌ Failed to find subscription by Paystack subscription:",
+      error
+    );
+
+    throw error;
+  }
+
+  return data as Subscription | null;
 }
