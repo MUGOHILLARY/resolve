@@ -6,9 +6,29 @@ import {
 
 import {
   initializePaystackTransaction,
+  initializeMpesaCharge,
 } from "../services/paystackService.js";
 
-type CheckoutPlan = "monthly" | "yearly";
+type CheckoutPlan =
+  | "monthly"
+  | "yearly";
+
+type MpesaPlan =
+  | "monthly"
+  | "yearly";
+
+/*
+|--------------------------------------------------------------------------
+| GET CURRENT SUBSCRIPTION
+|--------------------------------------------------------------------------
+|
+| GET /api/subscription
+|
+| Returns the authenticated user's current
+| Resolve subscription.
+|
+|--------------------------------------------------------------------------
+*/
 
 export async function getMySubscription(
   req: Request,
@@ -18,12 +38,15 @@ export async function getMySubscription(
     if (!req.userId) {
       return res.status(401).json({
         success: false,
-        message: "Authentication required.",
+        message:
+          "Authentication required.",
       });
     }
 
     const subscription =
-      await ensureSubscription(req.userId);
+      await ensureSubscription(
+        req.userId
+      );
 
     return res.status(200).json({
       success: true,
@@ -37,52 +60,64 @@ export async function getMySubscription(
 
     return res.status(500).json({
       success: false,
-      message: "Failed to load subscription.",
+      message:
+        "Failed to load subscription.",
     });
   }
 }
 
-/**
- * Initialize Paystack checkout.
- *
- * POST /api/subscription/checkout
- *
- * Body:
- * {
- *   "plan": "monthly"
- * }
- *
- * or:
- *
- * {
- *   "plan": "yearly"
- * }
- */
+/*
+|--------------------------------------------------------------------------
+| CARD CHECKOUT
+|--------------------------------------------------------------------------
+|
+| POST /api/subscription/checkout
+|
+| Body:
+|
+| {
+|   "plan": "monthly"
+| }
+|
+| or
+|
+| {
+|   "plan": "yearly"
+| }
+|
+| This is the existing Paystack recurring
+| card subscription flow.
+|
+|--------------------------------------------------------------------------
+*/
+
 export async function createCheckout(
   req: Request,
   res: Response
 ) {
   try {
     /*
-     * ---------------------------------------------------------------
-     * Authentication
-     * ---------------------------------------------------------------
-     */
+    |--------------------------------------------------------------------------
+    | Authentication
+    |--------------------------------------------------------------------------
+    */
 
     if (!req.userId) {
       return res.status(401).json({
         success: false,
-        message: "Authentication required.",
+        message:
+          "Authentication required.",
       });
     }
 
     /*
-     * ---------------------------------------------------------------
-     * User email
-     * ---------------------------------------------------------------
-     */
+    |--------------------------------------------------------------------------
+    | User email
+    |--------------------------------------------------------------------------
+    */
 
-    const email = req.userEmail;
+    const email =
+      req.userEmail;
 
     if (!email) {
       return res.status(400).json({
@@ -93,12 +128,13 @@ export async function createCheckout(
     }
 
     /*
-     * ---------------------------------------------------------------
-     * Validate plan
-     * ---------------------------------------------------------------
-     */
+    |--------------------------------------------------------------------------
+    | Validate plan
+    |--------------------------------------------------------------------------
+    */
 
-    const plan = req.body?.plan as CheckoutPlan;
+    const plan =
+      req.body?.plan as CheckoutPlan;
 
     if (
       plan !== "monthly" &&
@@ -112,13 +148,21 @@ export async function createCheckout(
     }
 
     /*
-     * ---------------------------------------------------------------
-     * Prevent duplicate checkout for active Premium users
-     * ---------------------------------------------------------------
-     */
+    |--------------------------------------------------------------------------
+    | Get or create Resolve subscription
+    |--------------------------------------------------------------------------
+    */
 
     const subscription =
-      await ensureSubscription(req.userId);
+      await ensureSubscription(
+        req.userId
+      );
+
+    /*
+    |--------------------------------------------------------------------------
+    | Prevent duplicate Premium checkout
+    |--------------------------------------------------------------------------
+    */
 
     const premiumStatuses = [
       "active",
@@ -126,7 +170,8 @@ export async function createCheckout(
     ];
 
     const isCurrentlyPremium =
-      subscription.plan === "premium" &&
+      subscription.plan ===
+        "premium" &&
       premiumStatuses.includes(
         subscription.status
       );
@@ -140,10 +185,10 @@ export async function createCheckout(
     }
 
     /*
-     * ---------------------------------------------------------------
-     * Initialize Paystack transaction
-     * ---------------------------------------------------------------
-     */
+    |--------------------------------------------------------------------------
+    | Initialize Paystack recurring card checkout
+    |--------------------------------------------------------------------------
+    */
 
     const checkout =
       await initializePaystackTransaction(
@@ -153,33 +198,44 @@ export async function createCheckout(
       );
 
     console.log(
-      "💳 Resolve Paystack checkout initialized:",
+      "💳 Resolve Paystack card checkout initialized:",
       {
-        userId: req.userId,
+        userId:
+          req.userId,
+
         plan,
-        reference: checkout.reference,
+
+        reference:
+          checkout.reference,
       }
     );
 
     /*
-     * ---------------------------------------------------------------
-     * Return checkout information to frontend
-     * ---------------------------------------------------------------
-     */
+    |--------------------------------------------------------------------------
+    | Return checkout information
+    |--------------------------------------------------------------------------
+    */
 
     return res.status(200).json({
       success: true,
+
       plan,
+
+      payment_method:
+        "card",
+
       authorization_url:
         checkout.authorization_url,
+
       access_code:
         checkout.access_code,
+
       reference:
         checkout.reference,
     });
   } catch (error: any) {
     console.error(
-      "❌ Failed to initialize Paystack checkout:",
+      "❌ Failed to initialize Paystack card checkout:",
       error
     );
 
@@ -187,6 +243,222 @@ export async function createCheckout(
       success: false,
       message:
         "Unable to initialize Premium checkout.",
+    });
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
+| M-PESA CHECKOUT
+|--------------------------------------------------------------------------
+|
+| POST /api/subscription/mpesa
+|
+| Body:
+|
+| {
+|   "plan": "monthly",
+|   "phone": "0712345678"
+| }
+|
+| or
+|
+| {
+|   "plan": "yearly",
+|   "phone": "+254712345678"
+| }
+|
+| M-PESA is implemented as a one-time
+| payment rather than a recurring Paystack
+| subscription.
+|
+|--------------------------------------------------------------------------
+*/
+
+export async function createMpesaCheckout(
+  req: Request,
+  res: Response
+) {
+  try {
+    /*
+    |--------------------------------------------------------------------------
+    | Authentication
+    |--------------------------------------------------------------------------
+    */
+
+    if (!req.userId) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Authentication required.",
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | User email
+    |--------------------------------------------------------------------------
+    */
+
+    const email =
+      req.userEmail;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Authenticated user does not have an email address.",
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Validate plan
+    |--------------------------------------------------------------------------
+    */
+
+    const plan =
+      req.body?.plan as MpesaPlan;
+
+    if (
+      plan !== "monthly" &&
+      plan !== "yearly"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Invalid plan. Choose "monthly" or "yearly".',
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Validate phone
+    |--------------------------------------------------------------------------
+    */
+
+    const phone =
+      req.body?.phone;
+
+    if (
+      !phone ||
+      typeof phone !== "string"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "M-PESA phone number is required.",
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Get or create Resolve subscription
+    |--------------------------------------------------------------------------
+    */
+
+    const subscription =
+      await ensureSubscription(
+        req.userId
+      );
+
+    /*
+    |--------------------------------------------------------------------------
+    | Prevent duplicate Premium payment
+    |--------------------------------------------------------------------------
+    */
+
+    const premiumStatuses = [
+      "active",
+      "trialing",
+    ];
+
+    const isCurrentlyPremium =
+      subscription.plan ===
+        "premium" &&
+      premiumStatuses.includes(
+        subscription.status
+      );
+
+    if (isCurrentlyPremium) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "You already have an active Resolve Premium subscription.",
+      });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Initialize M-PESA payment
+    |--------------------------------------------------------------------------
+    */
+
+    const charge =
+      await initializeMpesaCharge(
+        email,
+        phone,
+        plan,
+        req.userId
+      );
+
+    console.log(
+      "📱 Resolve M-PESA payment initialized:",
+      {
+        userId:
+          req.userId,
+
+        plan,
+
+        reference:
+          charge.reference,
+
+        status:
+          charge.status,
+
+        amount:
+          charge.amount,
+
+        currency:
+          charge.currency,
+      }
+    );
+
+    /*
+    |--------------------------------------------------------------------------
+    | Return M-PESA payment information
+    |--------------------------------------------------------------------------
+    */
+
+    return res.status(200).json({
+      success: true,
+
+      plan,
+
+      payment_method:
+        "mpesa",
+
+      reference:
+        charge.reference,
+
+      status:
+        charge.status,
+
+      display_text:
+        charge.display_text ??
+        "Please check your phone and complete the M-PESA payment.",
+    });
+  } catch (error: any) {
+    console.error(
+      "❌ Failed to initialize M-PESA payment:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error?.message ??
+        "Unable to initialize M-PESA payment.",
     });
   }
 }

@@ -23,28 +23,23 @@ type PaystackWebhookEvent = {
 | Resolve Paystack Webhook Controller
 |--------------------------------------------------------------------------
 |
-| Paystack sends webhook events for:
+| Handles:
 |
-| - Initial successful payments
+| - Initial successful card payments
+| - M-PESA successful payments
 | - Subscription creation
-| - Recurring successful payments
+| - Recurring card payments
 | - Failed recurring payments
-| - Non-renewing subscriptions
-| - Disabled subscriptions
-|
-| The webhook must:
-|
-| 1. Verify the Paystack signature.
-| 2. Identify the Resolve user.
-| 3. Update the subscription state.
-| 4. Return HTTP 200 when the event has been handled.
+| - Subscription cancellation
+| - Subscription disabling
+| - Invoice events
 |
 |--------------------------------------------------------------------------
 */
 
 /*
 |--------------------------------------------------------------------------
-| Find Resolve subscription from Paystack event
+| Find Resolve subscription/user
 |--------------------------------------------------------------------------
 |
 | Identification order:
@@ -52,9 +47,6 @@ type PaystackWebhookEvent = {
 | 1. Resolve metadata user_id
 | 2. Paystack subscription code
 | 3. Paystack customer code
-|
-| This is important because recurring Paystack events may not contain
-| the original Resolve metadata.
 |
 |--------------------------------------------------------------------------
 */
@@ -67,21 +59,27 @@ async function findResolveSubscription(
 
   /*
   |--------------------------------------------------------------------------
-  | 1. Resolve user_id from metadata
+  | 1. Resolve user ID from metadata
   |--------------------------------------------------------------------------
   */
 
   const metadataUserId =
-    typeof metadata?.user_id === "string" &&
+    typeof metadata?.user_id ===
+      "string" &&
     metadata.user_id.length > 0
       ? metadata.user_id
       : null;
 
   if (metadataUserId) {
     return {
-      subscription: null,
-      userId: metadataUserId,
-      source: "metadata",
+      subscription:
+        null,
+
+      userId:
+        metadataUserId,
+
+      source:
+        "metadata",
     };
   }
 
@@ -92,12 +90,16 @@ async function findResolveSubscription(
   */
 
   const subscriptionCode =
-    event.data?.subscription_code ??
-    event.data?.subscription?.subscription_code ??
-    event.data?.subscription?.subscription_code;
+    event.data
+      ?.subscription_code ??
+    event.data
+      ?.subscription
+      ?.subscription_code ??
+    null;
 
   if (
-    typeof subscriptionCode === "string" &&
+    typeof subscriptionCode ===
+      "string" &&
     subscriptionCode.length > 0
   ) {
     const subscription =
@@ -108,8 +110,12 @@ async function findResolveSubscription(
     if (subscription) {
       return {
         subscription,
-        userId: subscription.user_id,
-        source: "provider_subscription",
+
+        userId:
+          subscription.user_id,
+
+        source:
+          "provider_subscription",
       };
     }
   }
@@ -121,12 +127,20 @@ async function findResolveSubscription(
   */
 
   const customerCode =
-    event.data?.customer?.customer_code ??
-    event.data?.customer_code ??
-    event.data?.subscription?.customer?.customer_code;
+    event.data
+      ?.customer
+      ?.customer_code ??
+    event.data
+      ?.customer_code ??
+    event.data
+      ?.subscription
+      ?.customer
+      ?.customer_code ??
+    null;
 
   if (
-    typeof customerCode === "string" &&
+    typeof customerCode ===
+      "string" &&
     customerCode.length > 0
   ) {
     const subscription =
@@ -137,8 +151,12 @@ async function findResolveSubscription(
     if (subscription) {
       return {
         subscription,
-        userId: subscription.user_id,
-        source: "provider_customer",
+
+        userId:
+          subscription.user_id,
+
+        source:
+          "provider_customer",
       };
     }
   }
@@ -150,15 +168,25 @@ async function findResolveSubscription(
   */
 
   return {
-    subscription: null,
-    userId: null,
-    source: "none",
+    subscription:
+      null,
+
+    userId:
+      null,
+
+    source:
+      "none",
   };
 }
 
 /*
 |--------------------------------------------------------------------------
-| Determine Resolve billing plan
+| Determine Resolve Premium plan
+|--------------------------------------------------------------------------
+|
+| Metadata is preferred because it is the most
+| reliable source for both card and M-PESA.
+|
 |--------------------------------------------------------------------------
 */
 
@@ -170,7 +198,7 @@ function determineResolvePlan(
 
   /*
   |--------------------------------------------------------------------------
-  | Prefer Resolve metadata
+  | Resolve metadata
   |--------------------------------------------------------------------------
   */
 
@@ -190,19 +218,27 @@ function determineResolvePlan(
 
   /*
   |--------------------------------------------------------------------------
-  | Fall back to Paystack plan code
+  | Paystack plan fallback
   |--------------------------------------------------------------------------
   */
 
   const planCode =
-    event.data?.plan?.plan_code ??
-    event.data?.plan_object?.plan_code ??
-    event.data?.subscription?.plan?.plan_code ??
+    event.data
+      ?.plan
+      ?.plan_code ??
+    event.data
+      ?.plan_object
+      ?.plan_code ??
+    event.data
+      ?.subscription
+      ?.plan
+      ?.plan_code ??
     null;
 
   if (
     planCode ===
-    process.env.PAYSTACK_YEARLY_PLAN_CODE
+    process.env
+      .PAYSTACK_YEARLY_PLAN_CODE
   ) {
     return "yearly";
   }
@@ -212,7 +248,42 @@ function determineResolvePlan(
 
 /*
 |--------------------------------------------------------------------------
-| Extract Paystack customer code
+| Get payment method
+|--------------------------------------------------------------------------
+*/
+
+function getPaymentMethod(
+  event: PaystackWebhookEvent
+): string | null {
+  const metadata =
+    event.data?.metadata;
+
+  if (
+    typeof metadata?.payment_method ===
+      "string"
+  ) {
+    return metadata.payment_method;
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | Paystack channel fallback
+  |--------------------------------------------------------------------------
+  */
+
+  if (
+    event.data?.channel ===
+    "mobile_money"
+  ) {
+    return "mpesa";
+  }
+
+  return null;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Get customer code
 |--------------------------------------------------------------------------
 */
 
@@ -220,20 +291,29 @@ function getCustomerCode(
   event: PaystackWebhookEvent
 ): string | null {
   const customerCode =
-    event.data?.customer?.customer_code ??
-    event.data?.customer_code ??
-    event.data?.subscription?.customer?.customer_code ??
+    event.data
+      ?.customer
+      ?.customer_code ??
+    event.data
+      ?.customer_code ??
+    event.data
+      ?.subscription
+      ?.customer
+      ?.customer_code ??
     null;
 
-  return typeof customerCode === "string" &&
+  return (
+    typeof customerCode ===
+      "string" &&
     customerCode.length > 0
-    ? customerCode
-    : null;
+      ? customerCode
+      : null
+  );
 }
 
 /*
 |--------------------------------------------------------------------------
-| Extract Paystack subscription code
+| Get subscription code
 |--------------------------------------------------------------------------
 */
 
@@ -241,19 +321,25 @@ function getSubscriptionCode(
   event: PaystackWebhookEvent
 ): string | null {
   const subscriptionCode =
-    event.data?.subscription_code ??
-    event.data?.subscription?.subscription_code ??
+    event.data
+      ?.subscription_code ??
+    event.data
+      ?.subscription
+      ?.subscription_code ??
     null;
 
-  return typeof subscriptionCode === "string" &&
+  return (
+    typeof subscriptionCode ===
+      "string" &&
     subscriptionCode.length > 0
-    ? subscriptionCode
-    : null;
+      ? subscriptionCode
+      : null
+  );
 }
 
 /*
 |--------------------------------------------------------------------------
-| Extract next payment date
+| Get next payment date
 |--------------------------------------------------------------------------
 */
 
@@ -261,19 +347,68 @@ function getNextPaymentDate(
   event: PaystackWebhookEvent
 ): string | null {
   const nextPaymentDate =
-    event.data?.next_payment_date ??
-    event.data?.subscription?.next_payment_date ??
+    event.data
+      ?.next_payment_date ??
+    event.data
+      ?.subscription
+      ?.next_payment_date ??
     null;
 
-  return typeof nextPaymentDate === "string" &&
+  return (
+    typeof nextPaymentDate ===
+      "string" &&
     nextPaymentDate.length > 0
-    ? nextPaymentDate
-    : null;
+      ? nextPaymentDate
+      : null
+  );
 }
 
 /*
 |--------------------------------------------------------------------------
-| Main webhook handler
+| Calculate M-PESA Premium period
+|--------------------------------------------------------------------------
+|
+| M-PESA is a one-time payment.
+|
+| Monthly:
+|     +1 month
+|
+| Yearly:
+|     +1 year
+|
+|--------------------------------------------------------------------------
+*/
+
+function getMpesaPeriodEnd(
+  plan:
+    | "monthly"
+    | "yearly",
+  startDate: Date
+): string {
+  const endDate =
+    new Date(
+      startDate.getTime()
+    );
+
+  if (
+    plan ===
+    "monthly"
+  ) {
+    endDate.setMonth(
+      endDate.getMonth() + 1
+    );
+  } else {
+    endDate.setFullYear(
+      endDate.getFullYear() + 1
+    );
+  }
+
+  return endDate.toISOString();
+}
+
+/*
+|--------------------------------------------------------------------------
+| MAIN WEBHOOK HANDLER
 |--------------------------------------------------------------------------
 */
 
@@ -284,10 +419,11 @@ export async function handlePaystackWebhook(
   try {
     /*
     |--------------------------------------------------------------------------
-    | Raw body
+    | RAW BODY
     |--------------------------------------------------------------------------
     |
-    | The Paystack signature is generated from the exact raw request body.
+    | Paystack signature verification requires
+    | the exact raw request body.
     |
     |--------------------------------------------------------------------------
     */
@@ -295,24 +431,32 @@ export async function handlePaystackWebhook(
     const rawBody =
       req.body as Buffer;
 
-    if (!Buffer.isBuffer(rawBody)) {
+    if (
+      !Buffer.isBuffer(
+        rawBody
+      )
+    ) {
       console.error(
         "❌ Paystack webhook body is not a Buffer."
       );
 
-      return res.sendStatus(400);
+      return res.sendStatus(
+        400
+      );
     }
 
     /*
     |--------------------------------------------------------------------------
-    | Verify Paystack signature
+    | VERIFY SIGNATURE
     |--------------------------------------------------------------------------
     */
 
     const signature =
       req.headers[
         "x-paystack-signature"
-      ] as string | undefined;
+      ] as
+        | string
+        | undefined;
 
     const isValid =
       verifyPaystackWebhookSignature(
@@ -325,21 +469,26 @@ export async function handlePaystackWebhook(
         "❌ Invalid Paystack webhook signature."
       );
 
-      return res.sendStatus(401);
+      return res.sendStatus(
+        401
+      );
     }
 
     /*
     |--------------------------------------------------------------------------
-    | Parse event
+    | PARSE EVENT
     |--------------------------------------------------------------------------
     */
 
-    let event: PaystackWebhookEvent;
+    let event:
+      PaystackWebhookEvent;
 
     try {
       event =
         JSON.parse(
-          rawBody.toString("utf8")
+          rawBody.toString(
+            "utf8"
+          )
         ) as PaystackWebhookEvent;
     } catch (error) {
       console.error(
@@ -347,7 +496,9 @@ export async function handlePaystackWebhook(
         error
       );
 
-      return res.sendStatus(400);
+      return res.sendStatus(
+        400
+      );
     }
 
     console.log(
@@ -357,7 +508,7 @@ export async function handlePaystackWebhook(
 
     /*
     |--------------------------------------------------------------------------
-    | Basic event validation
+    | BASIC VALIDATION
     |--------------------------------------------------------------------------
     */
 
@@ -366,27 +517,40 @@ export async function handlePaystackWebhook(
         "⚠️ Paystack webhook has no event type."
       );
 
-      return res.sendStatus(200);
+      return res.sendStatus(
+        200
+      );
     }
 
     /*
     |--------------------------------------------------------------------------
-    | Extract common Paystack identifiers
+    | COMMON IDENTIFIERS
     |--------------------------------------------------------------------------
     */
 
     const customerCode =
-      getCustomerCode(event);
+      getCustomerCode(
+        event
+      );
 
     const subscriptionCode =
-      getSubscriptionCode(event);
+      getSubscriptionCode(
+        event
+      );
 
     const nextPaymentDate =
-      getNextPaymentDate(event);
+      getNextPaymentDate(
+        event
+      );
+
+    const paymentMethod =
+      getPaymentMethod(
+        event
+      );
 
     /*
     |--------------------------------------------------------------------------
-    | Identify Resolve user
+    | RESOLVE USER LOOKUP
     |--------------------------------------------------------------------------
     */
 
@@ -398,11 +562,23 @@ export async function handlePaystackWebhook(
     console.log(
       "🔎 Paystack webhook Resolve lookup:",
       {
-        event: event.event,
-        userId: resolved.userId,
-        source: resolved.source,
+        event:
+          event.event,
+
+        userId:
+          resolved.userId,
+
+        source:
+          resolved.source,
+
+        paymentMethod,
+
         customerCode,
+
         subscriptionCode,
+
+        reference:
+          event.data?.reference,
       }
     );
 
@@ -411,12 +587,10 @@ export async function handlePaystackWebhook(
     | CHARGE.SUCCESS
     |--------------------------------------------------------------------------
     |
-    | This occurs:
+    | This handles BOTH:
     |
-    | - After the initial Premium payment.
-    | - During recurring Premium payments.
-    |
-    | A successful charge means Premium should be active.
+    | 1. Card Premium payments
+    | 2. M-PESA Premium payments
     |
     |--------------------------------------------------------------------------
     */
@@ -431,36 +605,168 @@ export async function handlePaystackWebhook(
       |--------------------------------------------------------------------------
       */
 
-      if (!resolved.userId) {
+      if (
+        !resolved.userId
+      ) {
         console.warn(
           "⚠️ Paystack charge.success could not be associated with a Resolve user.",
           {
             reference:
-              event.data?.reference,
+              event.data
+                ?.reference,
+
             email:
-              event.data?.customer?.email,
+              event.data
+                ?.customer
+                ?.email,
+
             customerCode,
+
             subscriptionCode,
+
+            paymentMethod,
           }
         );
 
         /*
-        | Return 200 so Paystack does not repeatedly retry an event
-        | that Resolve cannot associate with an account.
+        |--------------------------------------------------------------------------
+        | Acknowledge event
+        |--------------------------------------------------------------------------
         */
 
-        return res.sendStatus(200);
+        return res.sendStatus(
+          200
+        );
       }
 
+      /*
+      |--------------------------------------------------------------------------
+      | Determine plan
+      |--------------------------------------------------------------------------
+      */
+
       const plan =
-        determineResolvePlan(event);
+        determineResolvePlan(
+          event
+        );
 
       const now =
         new Date();
 
       /*
       |--------------------------------------------------------------------------
-      | Update Premium subscription
+      | M-PESA PAYMENT
+      |--------------------------------------------------------------------------
+      |
+      | M-PESA is a one-time payment.
+      |
+      | Therefore we calculate the Premium
+      | expiry ourselves rather than relying
+      | on Paystack's recurring subscription
+      | next_payment_date.
+      |
+      |--------------------------------------------------------------------------
+      */
+
+      if (
+        paymentMethod ===
+        "mpesa"
+      ) {
+        const currentPeriodEnd =
+          getMpesaPeriodEnd(
+            plan,
+            now
+          );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Update Resolve subscription
+        |--------------------------------------------------------------------------
+        */
+
+        await updateSubscription(
+          resolved.userId,
+          {
+            provider:
+              "paystack",
+
+            provider_customer_id:
+              customerCode,
+
+            /*
+            |--------------------------------------------------------------------------
+            | M-PESA does not create the same
+            | recurring subscription code as
+            | a card subscription.
+            |
+            | We store the Paystack transaction
+            | reference here so the transaction
+            | remains identifiable.
+            |--------------------------------------------------------------------------
+            */
+
+            provider_subscription_id:
+              event.data
+                ?.reference ??
+              null,
+
+            plan:
+              "premium",
+
+            status:
+              "active",
+
+            current_period_start:
+              now.toISOString(),
+
+            current_period_end:
+              currentPeriodEnd,
+
+            cancel_at_period_end:
+              false,
+          }
+        );
+
+        console.log(
+          "📱✅ Resolve Premium activated via M-PESA:",
+          {
+            userId:
+              resolved.userId,
+
+            plan,
+
+            reference:
+              event.data
+                ?.reference,
+
+            amount:
+              event.data
+                ?.amount,
+
+            currency:
+              event.data
+                ?.currency,
+
+            currentPeriodEnd,
+
+            lookupSource:
+              resolved.source,
+          }
+        );
+
+        return res.sendStatus(
+          200
+        );
+      }
+
+      /*
+      |--------------------------------------------------------------------------
+      | CARD PAYMENT
+      |--------------------------------------------------------------------------
+      |
+      | Existing recurring Paystack
+      | subscription behavior.
+      |
       |--------------------------------------------------------------------------
       */
 
@@ -494,7 +800,7 @@ export async function handlePaystackWebhook(
       );
 
       console.log(
-        "✅ Resolve Premium activated/renewed:",
+        "💳✅ Resolve Premium activated/renewed via card:",
         {
           userId:
             resolved.userId,
@@ -502,7 +808,8 @@ export async function handlePaystackWebhook(
           plan,
 
           reference:
-            event.data?.reference,
+            event.data
+              ?.reference,
 
           customerCode,
 
@@ -515,7 +822,9 @@ export async function handlePaystackWebhook(
         }
       );
 
-      return res.sendStatus(200);
+      return res.sendStatus(
+        200
+      );
     }
 
     /*
@@ -523,9 +832,8 @@ export async function handlePaystackWebhook(
     | SUBSCRIPTION.CREATE
     |--------------------------------------------------------------------------
     |
-    | Paystack sends this when a recurring subscription is created.
-    |
-    | We synchronize the Paystack identifiers with Resolve.
+    | Paystack sends this for recurring
+    | card subscriptions.
     |
     |--------------------------------------------------------------------------
     */
@@ -534,13 +842,9 @@ export async function handlePaystackWebhook(
       event.event ===
       "subscription.create"
     ) {
-      /*
-      |--------------------------------------------------------------------------
-      | If we already know the Resolve user, synchronize identifiers.
-      |--------------------------------------------------------------------------
-      */
-
-      if (resolved.userId) {
+      if (
+        resolved.userId
+      ) {
         await updateSubscription(
           resolved.userId,
           {
@@ -574,32 +878,25 @@ export async function handlePaystackWebhook(
           "⚠️ Paystack subscription.create could not be associated with a Resolve user.",
           {
             customerCode,
+
             subscriptionCode,
+
             email:
-              event.data?.customer?.email,
+              event.data
+                ?.customer
+                ?.email,
           }
         );
       }
 
-      return res.sendStatus(200);
+      return res.sendStatus(
+        200
+      );
     }
 
     /*
     |--------------------------------------------------------------------------
     | SUBSCRIPTION.NOT_RENEW
-    |--------------------------------------------------------------------------
-    |
-    | The customer has requested cancellation/non-renewal.
-    |
-    | Premium should normally remain available until the current
-    | billing period ends.
-    |
-    | Therefore:
-    |
-    | cancel_at_period_end = true
-    |
-    | We do NOT immediately remove Premium.
-    |
     |--------------------------------------------------------------------------
     */
 
@@ -607,7 +904,9 @@ export async function handlePaystackWebhook(
       event.event ===
       "subscription.not_renew"
     ) {
-      if (resolved.userId) {
+      if (
+        resolved.userId
+      ) {
         await updateSubscription(
           resolved.userId,
           {
@@ -632,23 +931,20 @@ export async function handlePaystackWebhook(
           "⚠️ Could not identify Resolve user for subscription.not_renew.",
           {
             subscriptionCode,
+
             customerCode,
           }
         );
       }
 
-      return res.sendStatus(200);
+      return res.sendStatus(
+        200
+      );
     }
 
     /*
     |--------------------------------------------------------------------------
     | SUBSCRIPTION.DISABLE
-    |--------------------------------------------------------------------------
-    |
-    | The Paystack subscription has actually been disabled.
-    |
-    | Premium is therefore removed.
-    |
     |--------------------------------------------------------------------------
     */
 
@@ -656,7 +952,9 @@ export async function handlePaystackWebhook(
       event.event ===
       "subscription.disable"
     ) {
-      if (resolved.userId) {
+      if (
+        resolved.userId
+      ) {
         await updateSubscription(
           resolved.userId,
           {
@@ -684,26 +982,20 @@ export async function handlePaystackWebhook(
           "⚠️ Could not identify Resolve user for subscription.disable.",
           {
             subscriptionCode,
+
             customerCode,
           }
         );
       }
 
-      return res.sendStatus(200);
+      return res.sendStatus(
+        200
+      );
     }
 
     /*
     |--------------------------------------------------------------------------
     | INVOICE.PAYMENT_FAILED
-    |--------------------------------------------------------------------------
-    |
-    | A recurring payment failed.
-    |
-    | We mark the subscription as past_due rather than immediately
-    | deleting Premium access.
-    |
-    | This gives the billing system an opportunity to recover the payment.
-    |
     |--------------------------------------------------------------------------
     */
 
@@ -711,7 +1003,9 @@ export async function handlePaystackWebhook(
       event.event ===
       "invoice.payment_failed"
     ) {
-      if (resolved.userId) {
+      if (
+        resolved.userId
+      ) {
         await updateSubscription(
           resolved.userId,
           {
@@ -731,7 +1025,8 @@ export async function handlePaystackWebhook(
             customerCode,
 
             reference:
-              event.data?.reference,
+              event.data
+                ?.reference,
           }
         );
       } else {
@@ -739,23 +1034,20 @@ export async function handlePaystackWebhook(
           "⚠️ Could not identify Resolve user for invoice.payment_failed.",
           {
             subscriptionCode,
+
             customerCode,
           }
         );
       }
 
-      return res.sendStatus(200);
+      return res.sendStatus(
+        200
+      );
     }
 
     /*
     |--------------------------------------------------------------------------
     | INVOICE.CREATE
-    |--------------------------------------------------------------------------
-    |
-    | Paystack creates an invoice before attempting a recurring charge.
-    |
-    | No subscription status change is required here.
-    |
     |--------------------------------------------------------------------------
     */
 
@@ -774,24 +1066,23 @@ export async function handlePaystackWebhook(
           customerCode,
 
           amount:
-            event.data?.amount,
+            event.data
+              ?.amount,
 
           currency:
-            event.data?.currency,
+            event.data
+              ?.currency,
         }
       );
 
-      return res.sendStatus(200);
+      return res.sendStatus(
+        200
+      );
     }
 
     /*
     |--------------------------------------------------------------------------
     | INVOICE.UPDATE
-    |--------------------------------------------------------------------------
-    |
-    | Paystack may send updated invoice information after payment
-    | processing.
-    |
     |--------------------------------------------------------------------------
     */
 
@@ -810,19 +1101,23 @@ export async function handlePaystackWebhook(
           customerCode,
 
           status:
-            event.data?.status,
+            event.data
+              ?.status,
 
           amount:
-            event.data?.amount,
+            event.data
+              ?.amount,
         }
       );
 
-      return res.sendStatus(200);
+      return res.sendStatus(
+        200
+      );
     }
 
     /*
     |--------------------------------------------------------------------------
-    | Unknown / informational event
+    | UNKNOWN / INFORMATIONAL EVENT
     |--------------------------------------------------------------------------
     */
 
@@ -831,7 +1126,9 @@ export async function handlePaystackWebhook(
       event.event
     );
 
-    return res.sendStatus(200);
+    return res.sendStatus(
+      200
+    );
   } catch (error) {
     console.error(
       "❌ Paystack webhook processing error:",
@@ -843,12 +1140,14 @@ export async function handlePaystackWebhook(
     | HTTP 500
     |--------------------------------------------------------------------------
     |
-    | A server error tells Paystack that processing failed and allows
-    | Paystack to retry according to its webhook retry mechanism.
+    | Paystack can retry the webhook when
+    | Resolve reports a server-side failure.
     |
     |--------------------------------------------------------------------------
     */
 
-    return res.sendStatus(500);
+    return res.sendStatus(
+      500
+    );
   }
 }

@@ -7,15 +7,22 @@ import {
 import {
   getMySubscription,
   createCheckout,
+  createMpesaCheckout,
 } from "../controllers/subscriptionController.js";
 
-const router = Router();
+const router =
+  Router();
 
 /*
- * Current subscription
- *
- * GET /api/subscription
- */
+|--------------------------------------------------------------------------
+| CURRENT SUBSCRIPTION
+|--------------------------------------------------------------------------
+|
+| GET /api/subscription
+|
+|--------------------------------------------------------------------------
+*/
+
 router.get(
   "/",
   requireAuth,
@@ -23,14 +30,44 @@ router.get(
 );
 
 /*
- * Initialize Paystack checkout
- *
- * POST /api/subscription/checkout
- */
+|--------------------------------------------------------------------------
+| PAYSTACK CARD CHECKOUT
+|--------------------------------------------------------------------------
+|
+| POST /api/subscription/checkout
+|
+| Existing recurring card subscription flow.
+|
+|--------------------------------------------------------------------------
+*/
+
 router.post(
   "/checkout",
   requireAuth,
   createCheckout
+);
+
+/*
+|--------------------------------------------------------------------------
+| M-PESA CHECKOUT
+|--------------------------------------------------------------------------
+|
+| POST /api/subscription/mpesa
+|
+| Body:
+|
+| {
+|   "plan": "monthly",
+|   "phone": "0712345678"
+| }
+|
+|--------------------------------------------------------------------------
+*/
+
+router.post(
+  "/mpesa",
+  requireAuth,
+  createMpesaCheckout
 );
 
 export default router;

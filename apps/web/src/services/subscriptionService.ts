@@ -19,6 +19,7 @@ export type SubscriptionStatus =
 
 export type Subscription = {
   id: string;
+
   user_id: string;
 
   provider: string;
@@ -52,12 +53,19 @@ export type Subscription = {
 
 export type SubscriptionResponse = {
   success: boolean;
+
   subscription: Subscription;
 };
 
 export type CheckoutPlan =
   | "monthly"
   | "yearly";
+
+/*
+|--------------------------------------------------------------------------
+| Card Checkout
+|--------------------------------------------------------------------------
+*/
 
 export type CheckoutResponse = {
   success: boolean;
@@ -69,6 +77,43 @@ export type CheckoutResponse = {
   access_code: string;
 
   reference: string;
+};
+
+/*
+|--------------------------------------------------------------------------
+| M-PESA Checkout
+|--------------------------------------------------------------------------
+*/
+
+export type MpesaCheckoutResponse = {
+  success: boolean;
+
+  plan: CheckoutPlan;
+
+  payment_method: "mpesa";
+
+  reference: string;
+
+  status: string;
+
+  display_text?: string | null;
+};
+
+/*
+|--------------------------------------------------------------------------
+| M-PESA Prices
+|--------------------------------------------------------------------------
+|
+| These are the customer-facing prices in Kenyan Shillings.
+|
+*/
+
+export const MPESA_PRICES_KES: Record<
+  CheckoutPlan,
+  number
+> = {
+  monthly: 899,
+  yearly: 9449,
 };
 
 /*
@@ -143,7 +188,7 @@ export async function getMySubscription(): Promise<Subscription> {
 
 /*
 |--------------------------------------------------------------------------
-| Create Paystack Checkout
+| Create Paystack Card Checkout
 |--------------------------------------------------------------------------
 */
 
@@ -187,12 +232,11 @@ export async function createCheckout(
 
 /*
 |--------------------------------------------------------------------------
-| Start Paystack Checkout
+| Start Paystack Card Checkout
 |--------------------------------------------------------------------------
 |
 | This opens Paystack's hosted checkout page.
 |
-|--------------------------------------------------------------------------
 */
 
 export async function startPaystackCheckout(
@@ -211,6 +255,81 @@ export async function startPaystackCheckout(
 
   window.location.href =
     checkout.authorization_url;
+
+  return checkout;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Create M-PESA Checkout
+|--------------------------------------------------------------------------
+*/
+
+export async function createMpesaCheckout(
+  plan: CheckoutPlan,
+  phone: string
+): Promise<MpesaCheckoutResponse> {
+  const headers =
+    await getAuthorizationHeader();
+
+  const response =
+    await fetch(
+      `${API_URL}/api/subscription/mpesa`,
+      {
+        method: "POST",
+
+        headers: {
+          ...headers,
+
+          "Content-Type":
+            "application/json",
+        },
+
+        body: JSON.stringify({
+          plan,
+          phone,
+        }),
+      }
+    );
+
+  const data =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.message ||
+        "Unable to initialize M-PESA payment."
+    );
+  }
+
+  return data as MpesaCheckoutResponse;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Start M-PESA Checkout
+|--------------------------------------------------------------------------
+|
+| M-PESA payments are asynchronous.
+|
+| Paystack normally returns:
+|
+| status: "pay_offline"
+|
+| The customer then completes the M-PESA
+| authorization on their phone.
+|
+*/
+
+export async function startMpesaCheckout(
+  plan: CheckoutPlan,
+  phone: string
+): Promise<MpesaCheckoutResponse> {
+  const checkout =
+    await createMpesaCheckout(
+      plan,
+      phone
+    );
 
   return checkout;
 }
