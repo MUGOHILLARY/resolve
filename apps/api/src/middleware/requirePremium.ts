@@ -4,7 +4,32 @@ import type {
   Response,
 } from "express";
 
-import { isPremium } from "../services/subscriptionService.js";
+import {
+  isPremium,
+} from "../services/subscriptionService.js";
+
+/*
+|--------------------------------------------------------------------------
+| REQUIRE PREMIUM
+|--------------------------------------------------------------------------
+|
+| This middleware protects Premium-only API endpoints.
+|
+| IMPORTANT:
+|
+| requireAuth MUST execute before requirePremium.
+|
+| Example:
+|
+| router.get(
+|   "/analytics/advanced",
+|   requireAuth,
+|   requirePremium,
+|   controller
+| );
+|
+|--------------------------------------------------------------------------
+*/
 
 export async function requirePremium(
   req: Request,
@@ -13,18 +38,35 @@ export async function requirePremium(
 ) {
   try {
     /*
-     * requireAuth must run before requirePremium.
-     */
+    |--------------------------------------------------------------------------
+    | Authentication check
+    |--------------------------------------------------------------------------
+    */
+
     if (!req.userId) {
       return res.status(401).json({
         success: false,
-        message: "Authentication required.",
+        message:
+          "Authentication required.",
       });
     }
 
-    const premium = await isPremium(
-      req.userId
-    );
+    /*
+    |--------------------------------------------------------------------------
+    | Premium entitlement check
+    |--------------------------------------------------------------------------
+    */
+
+    const premium =
+      await isPremium(
+        req.userId
+      );
+
+    /*
+    |--------------------------------------------------------------------------
+    | Free users
+    |--------------------------------------------------------------------------
+    */
 
     if (!premium) {
       return res.status(403).json({
@@ -35,8 +77,14 @@ export async function requirePremium(
       });
     }
 
-    next();
-  } catch (error: any) {
+    /*
+    |--------------------------------------------------------------------------
+    | Premium user
+    |--------------------------------------------------------------------------
+    */
+
+    return next();
+  } catch (error: unknown) {
     console.error(
       "❌ Premium entitlement check failed:",
       error

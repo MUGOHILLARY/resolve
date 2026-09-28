@@ -1,7 +1,12 @@
-import type { Request, Response } from "express";
+import type {
+  Request,
+  Response,
+} from "express";
 
 import {
   ensureSubscription,
+  getEntitlementsForSubscription,
+  isPremiumSubscription,
 } from "../services/subscriptionService.js";
 
 import {
@@ -24,8 +29,14 @@ type MpesaPlan =
 |
 | GET /api/subscription
 |
-| Returns the authenticated user's current
-| Resolve subscription.
+| Returns:
+|
+| - subscription
+| - premium status
+| - feature entitlements
+|
+| This becomes the main endpoint the Resolve frontend can use to
+| understand what the authenticated user is allowed to access.
 |
 |--------------------------------------------------------------------------
 */
@@ -35,6 +46,12 @@ export async function getMySubscription(
   res: Response
 ) {
   try {
+    /*
+    |--------------------------------------------------------------------------
+    | Authentication
+    |--------------------------------------------------------------------------
+    */
+
     if (!req.userId) {
       return res.status(401).json({
         success: false,
@@ -43,16 +60,55 @@ export async function getMySubscription(
       });
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | Get or create subscription
+    |--------------------------------------------------------------------------
+    */
+
     const subscription =
       await ensureSubscription(
         req.userId
       );
 
+    /*
+    |--------------------------------------------------------------------------
+    | Determine Premium entitlement
+    |--------------------------------------------------------------------------
+    */
+
+    const premium =
+      isPremiumSubscription(
+        subscription
+      );
+
+    /*
+    |--------------------------------------------------------------------------
+    | Determine feature access
+    |--------------------------------------------------------------------------
+    */
+
+    const entitlements =
+      getEntitlementsForSubscription(
+        subscription
+      );
+
+    /*
+    |--------------------------------------------------------------------------
+    | Return subscription state
+    |--------------------------------------------------------------------------
+    */
+
     return res.status(200).json({
       success: true,
+
       subscription,
+
+      premium,
+
+      entitlements,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(
       "❌ Failed to load subscription:",
       error
@@ -85,8 +141,7 @@ export async function getMySubscription(
 |   "plan": "yearly"
 | }
 |
-| This is the existing Paystack recurring
-| card subscription flow.
+| Existing Paystack recurring card subscription flow.
 |
 |--------------------------------------------------------------------------
 */
@@ -164,19 +219,12 @@ export async function createCheckout(
     |--------------------------------------------------------------------------
     */
 
-    const premiumStatuses = [
-      "active",
-      "trialing",
-    ];
-
-    const isCurrentlyPremium =
-      subscription.plan ===
-        "premium" &&
-      premiumStatuses.includes(
-        subscription.status
+    const currentlyPremium =
+      isPremiumSubscription(
+        subscription
       );
 
-    if (isCurrentlyPremium) {
+    if (currentlyPremium) {
       return res.status(400).json({
         success: false,
         message:
@@ -242,6 +290,7 @@ export async function createCheckout(
     return res.status(500).json({
       success: false,
       message:
+        error?.message ??
         "Unable to initialize Premium checkout.",
     });
   }
@@ -268,9 +317,7 @@ export async function createCheckout(
 |   "phone": "+254712345678"
 | }
 |
-| M-PESA is implemented as a one-time
-| payment rather than a recurring Paystack
-| subscription.
+| M-PESA is implemented as a one-time payment.
 |
 |--------------------------------------------------------------------------
 */
@@ -368,19 +415,12 @@ export async function createMpesaCheckout(
     |--------------------------------------------------------------------------
     */
 
-    const premiumStatuses = [
-      "active",
-      "trialing",
-    ];
-
-    const isCurrentlyPremium =
-      subscription.plan ===
-        "premium" &&
-      premiumStatuses.includes(
-        subscription.status
+    const currentlyPremium =
+      isPremiumSubscription(
+        subscription
       );
 
-    if (isCurrentlyPremium) {
+    if (currentlyPremium) {
       return res.status(400).json({
         success: false,
         message:

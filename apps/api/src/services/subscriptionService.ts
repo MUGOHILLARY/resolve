@@ -44,6 +44,163 @@ export type Subscription = {
 
 /*
 |--------------------------------------------------------------------------
+| Resolve Entitlements
+|--------------------------------------------------------------------------
+|
+| This is the central definition of what Free and Premium users can access.
+|
+| IMPORTANT:
+|
+| The browser must never decide whether a user is Premium.
+|
+| The API determines the entitlement.
+|
+|--------------------------------------------------------------------------
+*/
+
+export type ResolveEntitlements = {
+  /*
+  |--------------------------------------------------------------------------
+  | Core features
+  |--------------------------------------------------------------------------
+  */
+
+  basicRecoveryDashboard: boolean;
+
+  journalAndMoodTracking: boolean;
+
+  basicWebsiteBlocking: boolean;
+
+  /*
+  |--------------------------------------------------------------------------
+  | AI Coach
+  |--------------------------------------------------------------------------
+  */
+
+  basicAICoach: boolean;
+
+  fullAICoach: boolean;
+
+  /*
+  |--------------------------------------------------------------------------
+  | Blocking
+  |--------------------------------------------------------------------------
+  */
+
+  customBlockedWebsites: boolean;
+
+  unlimitedBlockedSites: boolean;
+
+  scheduledBlocking: boolean;
+
+  multipleBlockingProfiles: boolean;
+
+  adaptiveProtection: boolean;
+
+  /*
+  |--------------------------------------------------------------------------
+  | Recovery intervention
+  |--------------------------------------------------------------------------
+  */
+
+  emergencyIntervention: boolean;
+
+  guidedBreathing: boolean;
+
+  focusTools: boolean;
+
+  /*
+  |--------------------------------------------------------------------------
+  | Analytics
+  |--------------------------------------------------------------------------
+  */
+
+  advancedRecoveryAnalytics: boolean;
+};
+
+/*
+|--------------------------------------------------------------------------
+| FREE ENTITLEMENTS
+|--------------------------------------------------------------------------
+|
+| Free users receive enough functionality to experience the core value
+| of Resolve.
+|
+|--------------------------------------------------------------------------
+*/
+
+export const FREE_ENTITLEMENTS: ResolveEntitlements = {
+  basicRecoveryDashboard: true,
+
+  journalAndMoodTracking: true,
+
+  basicWebsiteBlocking: true,
+
+  basicAICoach: true,
+
+  fullAICoach: false,
+
+  customBlockedWebsites: false,
+
+  unlimitedBlockedSites: false,
+
+  scheduledBlocking: false,
+
+  multipleBlockingProfiles: false,
+
+  adaptiveProtection: false,
+
+  emergencyIntervention: false,
+
+  guidedBreathing: false,
+
+  focusTools: false,
+
+  advancedRecoveryAnalytics: false,
+};
+
+/*
+|--------------------------------------------------------------------------
+| PREMIUM ENTITLEMENTS
+|--------------------------------------------------------------------------
+|
+| Premium unlocks the complete Resolve protection and recovery system.
+|
+|--------------------------------------------------------------------------
+*/
+
+export const PREMIUM_ENTITLEMENTS: ResolveEntitlements = {
+  basicRecoveryDashboard: true,
+
+  journalAndMoodTracking: true,
+
+  basicWebsiteBlocking: true,
+
+  basicAICoach: true,
+
+  fullAICoach: true,
+
+  customBlockedWebsites: true,
+
+  unlimitedBlockedSites: true,
+
+  scheduledBlocking: true,
+
+  multipleBlockingProfiles: true,
+
+  adaptiveProtection: true,
+
+  emergencyIntervention: true,
+
+  guidedBreathing: true,
+
+  focusTools: true,
+
+  advancedRecoveryAnalytics: true,
+};
+
+/*
+|--------------------------------------------------------------------------
 | GET SUBSCRIPTION
 |--------------------------------------------------------------------------
 */
@@ -74,8 +231,7 @@ export async function getSubscription(
 | ENSURE SUBSCRIPTION
 |--------------------------------------------------------------------------
 |
-| Every authenticated Resolve user should have
-| exactly one subscription record.
+| Every authenticated Resolve user should have exactly one subscription.
 |
 | New users receive:
 |
@@ -103,7 +259,7 @@ export async function ensureSubscription(
 
   /*
   |--------------------------------------------------------------------------
-  | Create free subscription
+  | Create Free subscription
   |--------------------------------------------------------------------------
   */
 
@@ -156,31 +312,28 @@ export async function ensureSubscription(
 
 /*
 |--------------------------------------------------------------------------
-| PREMIUM ENTITLEMENT CHECK
+| CHECK WHETHER A SUBSCRIPTION IS CURRENTLY PREMIUM
 |--------------------------------------------------------------------------
 |
 | Premium requires:
 |
 | 1. plan = premium
 | 2. status = active OR trialing
-| 3. subscription has not expired
+| 3. current period has not expired
 |
 |--------------------------------------------------------------------------
 */
 
-export async function isPremium(
-  userId: string
-): Promise<boolean> {
-  const subscription =
-    await getSubscription(userId);
-
+export function isPremiumSubscription(
+  subscription: Subscription | null
+): boolean {
   if (!subscription) {
     return false;
   }
 
   /*
   |--------------------------------------------------------------------------
-  | Check plan
+  | Plan
   |--------------------------------------------------------------------------
   */
 
@@ -193,7 +346,7 @@ export async function isPremium(
 
   /*
   |--------------------------------------------------------------------------
-  | Check status
+  | Status
   |--------------------------------------------------------------------------
   */
 
@@ -209,7 +362,7 @@ export async function isPremium(
 
   /*
   |--------------------------------------------------------------------------
-  | Check expiration
+  | Expiration
   |--------------------------------------------------------------------------
   */
 
@@ -234,13 +387,72 @@ export async function isPremium(
 
 /*
 |--------------------------------------------------------------------------
+| PREMIUM ENTITLEMENT CHECK
+|--------------------------------------------------------------------------
+*/
+
+export async function isPremium(
+  userId: string
+): Promise<boolean> {
+  const subscription =
+    await getSubscription(userId);
+
+  return isPremiumSubscription(
+    subscription
+  );
+}
+
+/*
+|--------------------------------------------------------------------------
+| GET ENTITLEMENTS FROM SUBSCRIPTION
+|--------------------------------------------------------------------------
+|
+| This function converts the subscription into a stable feature-access
+| object that the web application and extension can consume.
+|
+|--------------------------------------------------------------------------
+*/
+
+export function getEntitlementsForSubscription(
+  subscription: Subscription | null
+): ResolveEntitlements {
+  const premium =
+    isPremiumSubscription(
+      subscription
+    );
+
+  if (premium) {
+    return PREMIUM_ENTITLEMENTS;
+  }
+
+  return FREE_ENTITLEMENTS;
+}
+
+/*
+|--------------------------------------------------------------------------
+| GET USER ENTITLEMENTS
+|--------------------------------------------------------------------------
+*/
+
+export async function getUserEntitlements(
+  userId: string
+): Promise<ResolveEntitlements> {
+  const subscription =
+    await getSubscription(userId);
+
+  return getEntitlementsForSubscription(
+    subscription
+  );
+}
+
+/*
+|--------------------------------------------------------------------------
 | UPDATE SUBSCRIPTION
 |--------------------------------------------------------------------------
 |
-| This is used by the Paystack webhook.
+| Used by Paystack/webhook logic.
 |
-| The browser must NEVER directly modify
-| its subscription.
+| The browser must NEVER directly modify its subscription.
 |
 |--------------------------------------------------------------------------
 */
@@ -285,11 +497,6 @@ export async function updateSubscription(
 |--------------------------------------------------------------------------
 | FIND SUBSCRIPTION BY PAYSTACK CUSTOMER
 |--------------------------------------------------------------------------
-|
-| Used to identify the Resolve user associated with
-| a Paystack customer during recurring billing events.
-|
-|--------------------------------------------------------------------------
 */
 
 export async function getSubscriptionByProviderCustomerId(
@@ -324,11 +531,6 @@ export async function getSubscriptionByProviderCustomerId(
 /*
 |--------------------------------------------------------------------------
 | FIND SUBSCRIPTION BY PAYSTACK SUBSCRIPTION
-|--------------------------------------------------------------------------
-|
-| Used to identify the Resolve user associated with
-| a Paystack subscription during recurring billing events.
-|
 |--------------------------------------------------------------------------
 */
 

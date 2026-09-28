@@ -15,10 +15,18 @@ const router =
 
 /*
 |--------------------------------------------------------------------------
-| CURRENT SUBSCRIPTION
+| CURRENT SUBSCRIPTION + ENTITLEMENTS
 |--------------------------------------------------------------------------
 |
 | GET /api/subscription
+|
+| Returns:
+|
+| {
+|   subscription,
+|   premium,
+|   entitlements
+| }
 |
 |--------------------------------------------------------------------------
 */
@@ -36,7 +44,17 @@ router.get(
 |
 | POST /api/subscription/checkout
 |
-| Existing recurring card subscription flow.
+| Body:
+|
+| {
+|   "plan": "monthly"
+| }
+|
+| or:
+|
+| {
+|   "plan": "yearly"
+| }
 |
 |--------------------------------------------------------------------------
 */
