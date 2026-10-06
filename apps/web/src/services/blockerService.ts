@@ -1,179 +1,351 @@
 import { supabase } from "../lib/supabase";
 
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:4000";
+
+/**
+ * Blocker settings returned by the Resolve API.
+ */
 export interface BlockerSettings {
-  gambling: boolean;
+  id?: string;
+  user_id: string;
+
   adult_content: boolean;
+  gambling: boolean;
   social_media: boolean;
   gaming: boolean;
 
-  focus_mode: boolean;
   custom_sites: string[];
 
+  focus_mode: boolean;
   focus_until: string | null;
 
   emergency_lock: boolean;
   daily_limit: number;
 
+  // Recovery Lock
   recovery_lock_enabled: boolean;
   recovery_lock_level: string | null;
   recovery_lock_until: string | null;
   recovery_lock_reason: string | null;
+
+  created_at?: string;
+  updated_at?: string;
 }
 
-async function getCurrentUserId(): Promise<string> {
+/**
+ * API response wrapper.
+ */
+interface BlockerSettingsResponse {
+  success: boolean;
+  settings: BlockerSettings;
+  message?: string;
+}
+
+/**
+ * Error type used when the API returns a non-success status.
+ */
+interface ApiError extends Error {
+  code?: string;
+  status?: number;
+}
+
+/**
+ * Get the current Supabase access token and construct
+ * the Authorization header for the Resolve API.
+ */
+async function getAuthorizationHeader(): Promise<HeadersInit> {
   const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  if (error) throw error;
-
-  if (!user) {
-    throw new Error("User is not logged in.");
+  if (!session?.access_token) {
+    throw new Error("You are not authenticated.");
   }
 
-  return user.id;
+  return {
+    Authorization: `Bearer ${session.access_token}`,
+    "Content-Type": "application/json",
+  };
 }
 
-/*
-|--------------------------------------------------------------------------
-| Get Blocker Settings
-|--------------------------------------------------------------------------
-*/
+/**
+ * Parse an API response safely.
+ */
+async function parseResponse<T>(
+  response: Response
+): Promise<T> {
+  let data: T | null = null;
 
-export async function getBlockerSettings(): Promise<BlockerSettings> {
-  const userId = await getCurrentUserId();
+  /**
+   * 204 No Content is valid and has no JSON body.
+   */
+  if (response.status !== 204) {
+    const contentType =
+      response.headers.get("content-type") || "";
 
-  const { data, error } = await supabase
-    .from("blocker_settings")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle();
+    if (contentType.includes("application/json")) {
+      try {
+        data = (await response.json()) as T;
+      } catch {
+        throw new Error(
+          "The server returned an invalid JSON response."
+        );
+      }
+    } else {
+      const text = await response.text();
 
-  if (error) throw error;
+      if (text) {
+        throw new Error(text);
+      }
+    }
+  }
 
-  if (!data) {
-    const defaults = {
-      user_id: userId,
+  if (!response.ok) {
+    const errorData = data as
+      | {
+          message?: string;
+          code?: string;
+        }
+      | null;
 
-      gambling: true,
-      adult_content: true,
-      social_media: false,
-      gaming: false,
+    const error: ApiError = new Error(
+      errorData?.message ||
+        `Request failed with status ${response.status}.`
+    );
 
-      focus_mode: false,
-      custom_sites: [],
+    error.code = errorData?.code;
+    error.status = response.status;
 
-      focus_until: null,
+    throw error;
+  }
 
-      emergency_lock: false,
-      daily_limit: 0,
-
-      recovery_lock_enabled: false,
-      recovery_lock_level: null,
-      recovery_lock_until: null,
-      recovery_lock_reason: null,
-    };
-
-    const {
-      data: inserted,
-      error: insertError,
-    } = await supabase
-      .from("blocker_settings")
-      .insert(defaults)
-      .select()
-      .single();
-
-    if (insertError) throw insertError;
-
-    return inserted;
+  if (data === null) {
+    return {} as T;
   }
 
   return data;
 }
 
-/*
-|--------------------------------------------------------------------------
-| Update Settings
-|--------------------------------------------------------------------------
-*/
+/**
+ * GET /api/blocker
+ *
+ * Loads the authenticated user's blocker settings.
+ *
+ * cache: "no-store" prevents the browser from reusing
+ * cached authenticated blocker settings.
+ */
+export async function getBlockerSettings(): Promise<BlockerSettings> {
+  const headers = await getAuthorizationHeader();
 
+  const response = await fetch(`${API_URL}/api/blocker`, {
+    method: "GET",
+    headers,
+    cache: "no-store",
+  });
+
+  const data =
+    await parseResponse<BlockerSettingsResponse>(response);
+
+  if (!data.success || !data.settings) {
+    throw new Error(
+      data.message ||
+        "Unable to load blocker settings."
+    );
+  }
+
+  return data.settings;
+}
+
+/**
+ * PATCH /api/blocker
+ *
+ * Updates basic blocker settings.
+ *
+ * Custom websites are deliberately excluded from this
+ * endpoint because custom website management is Premium-only.
+ */
 export async function updateBlockerSettings(
   updates: Partial<BlockerSettings>
-) {
-  const userId = await getCurrentUserId();
+): Promise<BlockerSettings> {
+  const headers = await getAuthorizationHeader();
 
-  const { data, error } = await supabase
-    .from("blocker_settings")
-    .update(updates)
-    .eq("user_id", userId)
-    .select()
-    .single();
+  /**
+   * Never send protected/system fields or custom_sites
+   * through the general update endpoint.
+   *
+   * Custom sites must go through the Premium-protected
+   * custom-site endpoints.
+   */
+  const {
+    custom_sites: _customSites,
+    id: _id,
+    user_id: _userId,
+    created_at: _createdAt,
+    updated_at: _updatedAt,
+    ...safeUpdates
+  } = updates;
 
-  if (error) throw error;
+  const response = await fetch(`${API_URL}/api/blocker`, {
+    method: "PATCH",
+    headers: {
+      ...headers,
+      "Cache-Control": "no-store",
+    },
+    cache: "no-store",
+    body: JSON.stringify(safeUpdates),
+  });
 
-  return data;
-}
+  const data =
+    await parseResponse<BlockerSettingsResponse>(response);
 
-/*
-|--------------------------------------------------------------------------
-| Custom Websites
-|--------------------------------------------------------------------------
-*/
-
-export async function addCustomWebsite(site: string) {
-  const settings = await getBlockerSettings();
-
-  if (settings.custom_sites.includes(site)) {
-    return settings;
+  if (!data.success || !data.settings) {
+    throw new Error(
+      data.message ||
+        "Unable to update blocker settings."
+    );
   }
 
-  return updateBlockerSettings({
-    custom_sites: [
-      ...settings.custom_sites,
-      site,
-    ],
-  });
+  return data.settings;
 }
 
-export async function removeCustomWebsite(site: string) {
-  const settings = await getBlockerSettings();
+/**
+ * POST /api/blocker/custom-site
+ *
+ * Adds a custom website.
+ *
+ * The API route is Premium-protected.
+ */
+export async function addCustomWebsite(
+  website: string
+): Promise<BlockerSettings> {
+  const headers = await getAuthorizationHeader();
 
-  return updateBlockerSettings({
-    custom_sites:
-      settings.custom_sites.filter(
-        (item) => item !== site
-      ),
-  });
+  const response = await fetch(
+    `${API_URL}/api/blocker/custom-site`,
+    {
+      method: "POST",
+      headers,
+      cache: "no-store",
+      body: JSON.stringify({
+        website,
+      }),
+    }
+  );
+
+  const data =
+    await parseResponse<BlockerSettingsResponse>(response);
+
+  if (!data.success || !data.settings) {
+    throw new Error(
+      data.message ||
+        "Unable to add custom website."
+    );
+  }
+
+  return data.settings;
 }
 
-/*
-|--------------------------------------------------------------------------
-| Recovery Lock
-|--------------------------------------------------------------------------
-*/
+/**
+ * DELETE /api/blocker/custom-site
+ *
+ * Removes a custom website.
+ *
+ * The API route is Premium-protected.
+ */
+export async function removeCustomWebsite(
+  website: string
+): Promise<BlockerSettings> {
+  const headers = await getAuthorizationHeader();
 
+  const response = await fetch(
+    `${API_URL}/api/blocker/custom-site`,
+    {
+      method: "DELETE",
+      headers,
+      cache: "no-store",
+      body: JSON.stringify({
+        website,
+      }),
+    }
+  );
+
+  const data =
+    await parseResponse<BlockerSettingsResponse>(response);
+
+  if (!data.success || !data.settings) {
+    throw new Error(
+      data.message ||
+        "Unable to remove custom website."
+    );
+  }
+
+  return data.settings;
+}
+
+/**
+ * Activate Resolve Recovery Lock.
+ *
+ * IMPORTANT:
+ * The existing Blocker.tsx calls this function using:
+ *
+ *   activateRecoveryLock(level, years)
+ *
+ * where:
+ *   level = string
+ *   years = number
+ *
+ * We preserve that interface so Blocker.tsx does not need
+ * to be changed.
+ *
+ * The numeric duration is converted into an absolute
+ * ISO timestamp before being sent to the API.
+ */
 export async function activateRecoveryLock(
   level: string,
-  years: number,
-  reason = "Recovery Commitment"
-) {
-  const expires = new Date();
+  years: number
+): Promise<BlockerSettings> {
+  if (!level) {
+    throw new Error(
+      "Recovery lock level is required."
+    );
+  }
 
-  expires.setFullYear(
-    expires.getFullYear() + years
+  if (
+    !Number.isFinite(years) ||
+    years <= 0
+  ) {
+    throw new Error(
+      "Recovery lock duration must be greater than zero."
+    );
+  }
+
+  const recoveryLockUntil = new Date();
+
+  /**
+   * Convert years to days.
+   *
+   * Using 365 days preserves the existing duration model
+   * used by the Blocker UI.
+   */
+  recoveryLockUntil.setDate(
+    recoveryLockUntil.getDate() +
+      Math.round(years * 365)
   );
 
   return updateBlockerSettings({
     recovery_lock_enabled: true,
     recovery_lock_level: level,
     recovery_lock_until:
-      expires.toISOString(),
-    recovery_lock_reason: reason,
+      recoveryLockUntil.toISOString(),
+    recovery_lock_reason: "Recovery",
   });
 }
 
-export async function disableRecoveryLock() {
+/**
+ * Disable Resolve Recovery Lock.
+ */
+export async function disableRecoveryLock(): Promise<BlockerSettings> {
   return updateBlockerSettings({
     recovery_lock_enabled: false,
     recovery_lock_level: null,
