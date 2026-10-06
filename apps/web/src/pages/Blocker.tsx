@@ -18,6 +18,8 @@ import {
 
 import { useBlockerStore } from "../store/blockerStore";
 
+import PremiumGate from "../components/premium/PremiumGate";
+
 export default function Blocker() {
   const {
     settings,
@@ -138,8 +140,10 @@ export default function Blocker() {
 
   return (
     <div className="space-y-8">
+
       <BlockerHeader />
 
+      {/* Recovery Lock */}
       <RecoveryLockCard
         enabled={settings.recovery_lock_enabled}
         level={settings.recovery_lock_level ?? "None"}
@@ -148,19 +152,26 @@ export default function Blocker() {
         onActivate={handleRecoveryLock}
       />
 
+      {/* Basic category blocking - Free */}
       <CategoryCards
         settings={settings}
         onToggle={toggleSetting}
       />
 
-      <AddWebsiteForm
-        onAdd={addWebsite}
-      />
+      {/* Custom website blocking - Premium */}
+      <PremiumGate entitlement="customBlockedWebsites">
 
-      <WebsiteList
-        websites={settings.custom_sites}
-        onDelete={removeWebsite}
-      />
+        <AddWebsiteForm
+          onAdd={addWebsite}
+        />
+
+        <WebsiteList
+          websites={settings.custom_sites}
+          onDelete={removeWebsite}
+        />
+
+      </PremiumGate>
+
     </div>
   );
 }

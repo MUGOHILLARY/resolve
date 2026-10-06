@@ -18,6 +18,11 @@ export interface BlockerSettings {
 
   daily_limit: number;
 
+  recovery_lock_enabled: boolean;
+  recovery_lock_level: string | null;
+  recovery_lock_until: string | null;
+  recovery_lock_reason: string | null;
+
   created_at?: string;
   updated_at?: string;
 }
@@ -41,9 +46,14 @@ export async function getBlockerSettings(
     throw error;
   }
 
-  // Automatically create default settings
+  /*
+  |--------------------------------------------------------------------------
+  | Automatically create default settings
+  |--------------------------------------------------------------------------
+  */
+
   if (!data) {
-    return await createDefaultBlockerSettings(userId);
+    return createDefaultBlockerSettings(userId);
   }
 
   return data;
@@ -74,6 +84,11 @@ export async function createDefaultBlockerSettings(
     emergency_lock: false,
 
     daily_limit: 0,
+
+    recovery_lock_enabled: false,
+    recovery_lock_level: null,
+    recovery_lock_until: null,
+    recovery_lock_reason: null,
   };
 
   const { data, error } = await supabase
@@ -91,7 +106,7 @@ export async function createDefaultBlockerSettings(
 
 /*
 |--------------------------------------------------------------------------
-| Update Settings
+| Update Blocker Settings
 |--------------------------------------------------------------------------
 */
 
@@ -125,29 +140,55 @@ export async function updateBlockerSettings(
 |--------------------------------------------------------------------------
 | Add Custom Website
 |--------------------------------------------------------------------------
+|
+| Premium access is enforced by requirePremium
+| at the route level.
+|
+|--------------------------------------------------------------------------
 */
 
 export async function addCustomSite(
   userId: string,
   website: string
 ): Promise<BlockerSettings> {
-  const settings = await getBlockerSettings(userId);
+  const settings =
+    await getBlockerSettings(userId);
 
-  if (settings.custom_sites.includes(website)) {
+  /*
+  |--------------------------------------------------------------------------
+  | Avoid duplicate websites
+  |--------------------------------------------------------------------------
+  */
+
+  if (
+    settings.custom_sites.includes(
+      website
+    )
+  ) {
     return settings;
   }
 
-  return await updateBlockerSettings(userId, {
-    custom_sites: [
-      ...settings.custom_sites,
-      website,
-    ],
-  });
+  const updatedSites = [
+    ...settings.custom_sites,
+    website,
+  ];
+
+  return updateBlockerSettings(
+    userId,
+    {
+      custom_sites: updatedSites,
+    }
+  );
 }
 
 /*
 |--------------------------------------------------------------------------
 | Remove Custom Website
+|--------------------------------------------------------------------------
+|
+| Premium access is enforced by requirePremium
+| at the route level.
+|
 |--------------------------------------------------------------------------
 */
 
@@ -155,11 +196,18 @@ export async function removeCustomSite(
   userId: string,
   website: string
 ): Promise<BlockerSettings> {
-  const settings = await getBlockerSettings(userId);
+  const settings =
+    await getBlockerSettings(userId);
 
-  return await updateBlockerSettings(userId, {
-    custom_sites: settings.custom_sites.filter(
+  const updatedSites =
+    settings.custom_sites.filter(
       (site) => site !== website
-    ),
-  });
+    );
+
+  return updateBlockerSettings(
+    userId,
+    {
+      custom_sites: updatedSites,
+    }
+  );
 }
